@@ -20,30 +20,69 @@ const Orders = () => {
   const fetchOrders = async () => {
     try {
       const response = await axios.get('/orders');
-      setOrders(response.data);
+      const orders = Array.isArray(response.data) ? response.data : [];
+      
+      // Process orders to add customerName field
+      const processedOrders = orders.map(order => ({
+        ...order,
+        customerName: order.user ? (typeof order.user === 'object' ? order.user.name : order.user) : 'N/A'
+      }));
+      
+      setOrders(processedOrders);
     } catch (error) {
+      console.error('Error fetching orders:', error);
       setError('Error fetching orders');
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
   const columns = [
-    { field: 'orderNumber', headerName: 'Order #', width: 150 },
-    { field: 'user', headerName: 'Customer', width: 200,
-      valueGetter: (params) => params.row.user?.name || 'N/A' },
-    { field: 'totalAmount', headerName: 'Total', width: 120,
-      valueFormatter: (params) => `₹${params.value}` },
-    { field: 'status', headerName: 'Status', width: 150,
+    { 
+      field: 'orderNumber', 
+      headerName: 'Order #', 
+      width: 150,
+    },
+    { 
+      field: 'customerName', 
+      headerName: 'Customer', 
+      width: 200,
+    },
+    { 
+      field: 'totalAmount', 
+      headerName: 'Total', 
+      width: 120,
+      valueFormatter: (params) => {
+        if (params.value === null || params.value === undefined) return 'N/A';
+        return `₹${params.value}`;
+      }
+    },
+    { 
+      field: 'status', 
+      headerName: 'Status', 
+      width: 150,
       renderCell: (params) => (
         <Chip 
           label={params.value} 
           color={params.value === 'completed' ? 'success' : 'warning'}
           size="small"
         />
-      ) },
-    { field: 'createdAt', headerName: 'Date', width: 200,
-      valueFormatter: (params) => new Date(params.value).toLocaleDateString() },
+      ) 
+    },
+    { 
+      field: 'createdAt', 
+      headerName: 'Date', 
+      width: 200,
+      valueFormatter: (params) => {
+        if (!params.value) return 'N/A';
+        try {
+          return new Date(params.value).toLocaleDateString();
+        } catch (error) {
+          return 'Invalid Date';
+        }
+      }
+    },
   ];
 
   return (
@@ -59,18 +98,30 @@ const Orders = () => {
       )}
 
       <Box sx={{ height: 600, width: '100%' }}>
-        <DataGrid
-          rows={orders}
-          columns={columns}
-          getRowId={(row) => row._id}
-          loading={loading}
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{
-            pagination: {
-              paginationModel: { page: 0, pageSize: 10 },
-            },
-          }}
-        />
+        {orders && orders.length > 0 ? (
+          <DataGrid
+            rows={orders}
+            columns={columns}
+            getRowId={(row) => row._id || row.id || Math.random().toString()}
+            loading={loading}
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{
+              pagination: {
+                paginationModel: { page: 0, pageSize: 10 },
+              },
+            }}
+            onError={(error) => {
+              console.error('DataGrid error:', error);
+              setError('Error displaying data grid');
+            }}
+          />
+        ) : (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <Typography variant="h6" color="textSecondary">
+              {loading ? 'Loading orders...' : 'No orders found'}
+            </Typography>
+          </Box>
+        )}
       </Box>
     </Box>
   );

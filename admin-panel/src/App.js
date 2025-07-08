@@ -14,6 +14,7 @@ import Categories from './components/Categories';
 import Brands from './components/Brands';
 import Orders from './components/Orders';
 import Users from './components/Users';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Services
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -73,7 +74,9 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Products />
+                    <ErrorBoundary>
+                      <Products />
+                    </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>
               }
@@ -83,7 +86,9 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Categories />
+                    <ErrorBoundary>
+                      <Categories />
+                    </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>
               }
@@ -93,7 +98,9 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Brands />
+                    <ErrorBoundary>
+                      <Brands />
+                    </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>
               }
@@ -103,7 +110,9 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Orders />
+                    <ErrorBoundary>
+                      <Orders />
+                    </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>
               }
@@ -113,7 +122,9 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Users />
+                    <ErrorBoundary>
+                      <Users />
+                    </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>
               }

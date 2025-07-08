@@ -35,9 +35,12 @@ const Categories = () => {
   const fetchCategories = async () => {
     try {
       const response = await axios.get('/categories');
-      setCategories(response.data);
+      const categories = Array.isArray(response.data) ? response.data : [];
+      setCategories(categories);
     } catch (error) {
+      console.error('Error fetching categories:', error);
       setError('Error fetching categories');
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -84,9 +87,25 @@ const Categories = () => {
   };
 
   const columns = [
-    { field: 'name', headerName: 'Name', width: 300 },
-    { field: 'createdAt', headerName: 'Created', width: 200, 
-      valueFormatter: (params) => new Date(params.value).toLocaleDateString() },
+    { 
+      field: 'name', 
+      headerName: 'Name', 
+      width: 300,
+    },
+    { 
+      field: 'createdAt', 
+      headerName: 'Created', 
+      width: 200,
+      renderCell: (params) => {
+        const value = params.row.createdAt;
+        if (!value) return 'N/A';
+        try {
+          return new Date(value).toLocaleDateString();
+        } catch (error) {
+          return 'Invalid Date';
+        }
+      }
+    },
     {
       field: 'actions',
       headerName: 'Actions',
@@ -127,18 +146,30 @@ const Categories = () => {
       )}
 
       <Box sx={{ height: 600, width: '100%' }}>
-        <DataGrid
-          rows={categories}
-          columns={columns}
-          getRowId={(row) => row._id}
-          loading={loading}
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{
-            pagination: {
-              paginationModel: { page: 0, pageSize: 10 },
-            },
-          }}
-        />
+        {categories && categories.length > 0 ? (
+          <DataGrid
+            rows={categories}
+            columns={columns}
+            getRowId={(row) => row._id || row.id || Math.random().toString()}
+            loading={loading}
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{
+              pagination: {
+                paginationModel: { page: 0, pageSize: 10 },
+              },
+            }}
+            onError={(error) => {
+              console.error('DataGrid error:', error);
+              setError('Error displaying data grid');
+            }}
+          />
+        ) : (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <Typography variant="h6" color="textSecondary">
+              {loading ? 'Loading categories...' : 'No categories found'}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>

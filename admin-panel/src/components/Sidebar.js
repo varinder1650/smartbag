@@ -58,7 +58,7 @@ const Sidebar = ({ open, onToggle }) => {
         <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
           <StoreIcon color="primary" />
           <Typography variant="h6" color="primary">
-            Blinkit Admin
+            QuickComm
           </Typography>
         </Box>
         <Divider />

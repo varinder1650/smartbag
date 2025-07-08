@@ -90,7 +90,7 @@ const Dashboard = () => {
         Dashboard
       </Typography>
       <Typography variant="body1" color="textSecondary" gutterBottom>
-        Welcome to your Blinkit admin dashboard
+        Welcome to your Admin dashboard
       </Typography>
 
       <Grid container spacing={3} sx={{ mt: 2 }}>

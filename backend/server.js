@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const path = require('path');
 
 dotenv.config();
 
@@ -10,12 +11,31 @@ const app = express();
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(morgan('dev'));
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Root route
 app.get('/', (req, res) => {
   res.send('API is running...');
+});
+
+// Health check route
+app.get('/api/health', (req, res) => {
+  console.log('Health check requested from:', req.ip);
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    message: 'Backend is running successfully',
+    clientIP: req.ip,
+    userAgent: req.get('User-Agent')
+  });
 });
 
 // Routes
@@ -25,6 +45,8 @@ app.use('/api/categories', require('./routes/category'));
 app.use('/api/brands', require('./routes/brand'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/order'));
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/user', require('./routes/user'));
 
 // MongoDB connection
 const PORT = process.env.PORT || 3001;
