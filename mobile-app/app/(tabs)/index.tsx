@@ -239,6 +239,10 @@ const HomeScreen = () => {
     setSelectedCategory(categoryId);
   };
 
+  const handleViewAllPress = (categoryId: string) => {
+    router.push(`/category/${categoryId}`);
+  };
+
   const handleCartPress = () => {
     router.push('/(tabs)/explore');
   };
@@ -403,7 +407,7 @@ const HomeScreen = () => {
           <Text style={styles.categorySectionTitle}>
             {category.name}
           </Text>
-          <TouchableOpacity onPress={() => handleCategoryPress(category._id)}>
+          <TouchableOpacity onPress={() => handleViewAllPress(category._id)}>
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
