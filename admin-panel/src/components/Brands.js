@@ -35,7 +35,11 @@ const Brands = () => {
   const fetchBrands = async () => {
     try {
       const response = await axios.get('/brands');
-      const brands = Array.isArray(response.data) ? response.data : [];
+      
+      // Extract data from nested structure
+      const brandsData = response.data.brands || response.data;
+      const brands = Array.isArray(brandsData) ? brandsData : [];
+      
       setBrands(brands);
     } catch (error) {
       console.error('Error fetching brands:', error);

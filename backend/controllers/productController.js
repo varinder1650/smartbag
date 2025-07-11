@@ -48,9 +48,61 @@ exports.createProduct = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find().populate('category brand');
-    res.json(products);
+    const { 
+      category, 
+      brand, 
+      search, 
+      minPrice, 
+      maxPrice, 
+      inStock,
+      page = 1, 
+      limit = 20 
+    } = req.query;
+
+    // Build query object
+    const query = { isActive: true };
+    
+    if (category) query.category = category;
+    if (brand) query.brand = brand;
+    if (inStock === 'true') query.stock = { $gt: 0 };
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = parseFloat(minPrice);
+      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+    }
+    
+    if (search) {
+      query.$text = { $search: search };
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Execute query with optimization
+    const products = await Product.find(query)
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .select('name description price images stock category brand')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean(); // Convert to plain JavaScript objects for better performance
+
+    // Get total count for pagination
+    const total = await Product.countDocuments(query);
+
+    res.json({
+      products,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalProducts: total,
+        hasNextPage: skip + products.length < total,
+        hasPrevPage: parseInt(page) > 1
+      }
+    });
   } catch (err) {
+    console.error('Get Products Error:', err);
     res.status(500).json({ message: err.message });
   }
 };

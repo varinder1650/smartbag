@@ -3,20 +3,29 @@ const Product = require('../models/Product');
 
 exports.getCart = async (req, res) => {
   try {
-    let cart = await Cart.findOne({ user: req.user.id }).populate({
-      path: 'items.product',
-      select: 'name price images brand category',
-      populate: [
-        { path: 'brand', select: 'name' },
-        { path: 'category', select: 'name' }
-      ]
-    });
+    let cart = await Cart.findOne({ user: req.user.id })
+      .populate({
+        path: 'items.product',
+        select: 'name price images brand category stock isActive',
+        populate: [
+          { path: 'brand', select: 'name' },
+          { path: 'category', select: 'name' }
+        ]
+      })
+      .lean(); // Convert to plain object for better performance
 
     if (!cart) {
-      cart = await Cart.create({ user: req.user.id, items: [] });
+      cart = { user: req.user.id, items: [] };
     }
 
-    res.json({ items: cart.items });
+    // Filter out inactive or out-of-stock products
+    const validItems = cart.items.filter(item => 
+      item.product && 
+      item.product.isActive && 
+      item.product.stock > 0
+    );
+
+    res.json({ items: validItems });
   } catch (error) {
     console.error('Get cart error:', error);
     res.status(500).json({ message: 'Failed to get cart' });
@@ -31,10 +40,17 @@ exports.addToCart = async (req, res) => {
       return res.status(400).json({ message: 'Product ID is required' });
     }
 
-    // Check if product exists
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
+    if (quantity <= 0) {
+      return res.status(400).json({ message: 'Quantity must be greater than 0' });
+    }
+
+    // Check if product exists and is active
+    const product = await Product.findById(productId)
+      .select('name price images brand category stock isActive')
+      .lean();
+
+    if (!product || !product.isActive) {
+      return res.status(404).json({ message: 'Product not found or inactive' });
     }
 
     // Check if product is in stock
@@ -61,10 +77,10 @@ exports.addToCart = async (req, res) => {
 
     await cart.save();
 
-    // Populate product details
+    // Populate product details efficiently
     await cart.populate({
       path: 'items.product',
-      select: 'name price images brand category',
+      select: 'name price images brand category stock isActive',
       populate: [
         { path: 'brand', select: 'name' },
         { path: 'category', select: 'name' }
@@ -169,5 +185,25 @@ exports.removeFromCart = async (req, res) => {
   } catch (error) {
     console.error('Remove from cart error:', error);
     res.status(500).json({ message: 'Failed to remove from cart' });
+  }
+};
+
+exports.clearCart = async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ user: req.user.id });
+    if (!cart) {
+      return res.status(404).json({ message: 'Cart not found' });
+    }
+
+    cart.items = [];
+    await cart.save();
+
+    res.json({ 
+      message: 'Cart cleared successfully',
+      items: []
+    });
+  } catch (error) {
+    console.error('Clear cart error:', error);
+    res.status(500).json({ message: 'Failed to clear cart' });
   }
 }; 

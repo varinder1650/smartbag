@@ -35,7 +35,11 @@ const Categories = () => {
   const fetchCategories = async () => {
     try {
       const response = await axios.get('/categories');
-      const categories = Array.isArray(response.data) ? response.data : [];
+      
+      // Extract data from nested structure
+      const categoriesData = response.data.categories || response.data;
+      const categories = Array.isArray(categoriesData) ? categoriesData : [];
+      
       setCategories(categories);
     } catch (error) {
       console.error('Error fetching categories:', error);

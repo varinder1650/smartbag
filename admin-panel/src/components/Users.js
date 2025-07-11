@@ -43,8 +43,19 @@ const Users = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('/auth/users');
-      const users = Array.isArray(response.data) ? response.data : [];
+      console.log('=== FETCHING USERS ===');
+      const timestamp = Date.now();
+      const response = await axios.get(`/auth/users?_t=${timestamp}`);
+      console.log('Users Response:', response.data);
+      
+      // Extract data from nested structure
+      const usersData = response.data.users || response.data;
+      const users = Array.isArray(usersData) ? usersData : [];
+      
+      console.log('Extracted Users:', usersData);
+      console.log('Safe Users:', users);
+      console.log('Setting users:', users.length);
+      
       setUsers(users);
     } catch (error) {
       console.error('Error fetching users:', error);

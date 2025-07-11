@@ -57,7 +57,8 @@ const CartScreen = () => {
     try {
       console.log('=== FETCH CART DEBUG ===');
       console.log('Token:', token);
-      const response = await fetch(`${API_BASE_URL}/cart`, {
+      const timestamp = Date.now();
+      const response = await fetch(`${API_BASE_URL}/cart?_t=${timestamp}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -146,27 +147,8 @@ const CartScreen = () => {
   };
 
   const handleCheckout = () => {
-    if (!user?.address) {
-      Alert.alert(
-        'Address Required',
-        'Please add your delivery address in your profile before placing an order.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Go to Profile', onPress: () => router.push('/(tabs)/profile') },
-        ]
-      );
-      return;
-    }
-
-    // Navigate to checkout or place order directly
-    Alert.alert(
-      'Place Order',
-      'Do you want to place this order?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Place Order', onPress: placeOrder },
-      ]
-    );
+    // Navigate to checkout page
+    router.push('/checkout');
   };
 
   const placeOrder = async () => {
@@ -200,52 +182,61 @@ const CartScreen = () => {
     }
   };
 
-  const renderCartItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartItem}>
-      <Image
-        source={{ 
-          uri: item.product.images && item.product.images.length > 0 
-            ? `${API_BASE_URL.replace('/api', '')}${item.product.images[0]}`
-            : 'https://via.placeholder.com/150'
-        }}
-        style={styles.itemImage}
-        resizeMode="cover"
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName} numberOfLines={2}>
-          {item.product.name}
-        </Text>
-        <Text style={styles.itemBrand}>{item.product.brand?.name}</Text>
-        <Text style={styles.itemPrice}>₹{item.product.price}</Text>
-        
-        <View style={styles.quantityContainer}>
-          <TouchableOpacity
-            style={[styles.quantityButton, updating && styles.disabledButton]}
-            onPress={() => updateQuantity(item._id, item.quantity - 1)}
-            disabled={updating}
-          >
-            <Ionicons name="remove" size={16} color="#007AFF" />
-          </TouchableOpacity>
-          <Text style={styles.quantityText}>{item.quantity}</Text>
-          <TouchableOpacity
-            style={[styles.quantityButton, updating && styles.disabledButton]}
-            onPress={() => updateQuantity(item._id, item.quantity + 1)}
-            disabled={updating}
-          >
-            <Ionicons name="add" size={16} color="#007AFF" />
-          </TouchableOpacity>
+  const renderCartItem = ({ item }: { item: CartItem }) => {
+    const imageUrl = item.product.images && item.product.images.length > 0 
+      ? `${API_BASE_URL.replace('/api', '')}${item.product.images[0]}?_t=${Date.now()}`
+      : 'https://via.placeholder.com/150';
+    
+    return (
+      <View style={styles.cartItem}>
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.itemImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log('Cart item image failed to load for product:', item.product.name, 'Image:', imageUrl, 'Error:', error);
+          }}
+          onLoad={() => {
+            console.log('Cart item image loaded successfully for product:', item.product.name, 'Image:', imageUrl);
+          }}
+          defaultSource={{ uri: 'https://via.placeholder.com/150' }}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName} numberOfLines={2}>
+            {item.product.name}
+          </Text>
+          <Text style={styles.itemBrand}>{item.product.brand?.name}</Text>
+          <Text style={styles.itemPrice}>₹{item.product.price}</Text>
+          
+          <View style={styles.quantityContainer}>
+            <TouchableOpacity
+              style={[styles.quantityButton, updating && styles.disabledButton]}
+              onPress={() => updateQuantity(item._id, item.quantity - 1)}
+              disabled={updating}
+            >
+              <Ionicons name="remove" size={16} color="#007AFF" />
+            </TouchableOpacity>
+            <Text style={styles.quantityText}>{item.quantity}</Text>
+            <TouchableOpacity
+              style={[styles.quantityButton, updating && styles.disabledButton]}
+              onPress={() => updateQuantity(item._id, item.quantity + 1)}
+              disabled={updating}
+            >
+              <Ionicons name="add" size={16} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
         </View>
+        
+        <TouchableOpacity
+          style={[styles.removeButton, updating && styles.disabledButton]}
+          onPress={() => removeItem(item._id)}
+          disabled={updating}
+        >
+          <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+        </TouchableOpacity>
       </View>
-      
-      <TouchableOpacity
-        style={[styles.removeButton, updating && styles.disabledButton]}
-        onPress={() => removeItem(item._id)}
-        disabled={updating}
-      >
-        <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -415,8 +406,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   itemImage: {
-    width: 80,
-    height: 80,
+    width: 120,
+    height: 120,
     borderRadius: 8,
     marginRight: 16,
   },

@@ -45,8 +45,34 @@ interface SectionData {
 
 const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
 
+const CATEGORY_EMOJIS: { [key: string]: string } = {
+  Grocery: '🛒',
+  Pizza: '🍕',
+  Halal: '🥘',
+  'Fast Food': '🍔',
+  Alcohol: '🍷',
+  Convenience: '🏪',
+  Health: '💊',
+  Gourmet: '🍽️',
+  // Add more as needed
+};
+
 const HomeScreen = () => {
-  const { user, token } = useAuth();
+  // Initialize with safe defaults
+  const [authState, setAuthState] = React.useState({ user: null, token: null });
+  
+  // Try to get auth, but don't crash if it fails
+  React.useEffect(() => {
+    try {
+      const auth = useAuth();
+      setAuthState(auth);
+    } catch (error) {
+      console.warn('useAuth failed, using default state:', error);
+      setAuthState({ user: null, token: null });
+    }
+  }, []);
+  
+  const { user, token } = authState;
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -114,31 +140,46 @@ const HomeScreen = () => {
   };
 
   const filterProducts = () => {
-    let filtered = products;
+    try {
+      // Ensure products is always an array
+      let filtered = products || [];
+      console.log('filterProducts - products:', products);
+      console.log('filterProducts - filtered (initial):', filtered);
 
-    // Filter by category
-    if (selectedCategory) {
-      filtered = filtered.filter(product => product.category?._id === selectedCategory);
+      // Filter by category
+      if (selectedCategory) {
+        filtered = filtered.filter(product => product.category?._id === selectedCategory);
+        console.log('filterProducts - after category filter:', filtered);
+      }
+
+      // Filter by search query
+      if (searchQuery.trim()) {
+        filtered = filtered.filter(product =>
+          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.category?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.brand?.name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        console.log('filterProducts - after search filter:', filtered);
+      }
+
+      // Ensure we always set an array
+      const finalFiltered = Array.isArray(filtered) ? filtered : [];
+      console.log('filterProducts - final filtered:', finalFiltered);
+      setFilteredProducts(finalFiltered);
+    } catch (error) {
+      console.error('Error in filterProducts:', error);
+      setFilteredProducts([]);
     }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(product =>
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.category?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.brand?.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredProducts(filtered);
   };
 
   const fetchData = async () => {
     try {
+      console.log('fetchData - starting...');
+      const timestamp = Date.now();
       const [productsRes, categoriesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/products`),
-        fetch(`${API_BASE_URL}/categories`),
+        fetch(`${API_BASE_URL}/products?_t=${timestamp}`),
+        fetch(`${API_BASE_URL}/categories?_t=${timestamp}`),
       ]);
       
       if (!productsRes.ok || !categoriesRes.ok) {
@@ -148,11 +189,30 @@ const HomeScreen = () => {
       const productsData = await productsRes.json();
       const categoriesData = await categoriesRes.json();
       
-      setProducts(productsData);
-      setFilteredProducts(productsData);
-      setCategories(categoriesData);
+      console.log('fetchData - productsData:', productsData);
+      console.log('fetchData - categoriesData:', categoriesData);
+      
+      // Extract products from the nested structure
+      const productsArray = productsData.products || productsData;
+      const categoriesArray = categoriesData.categories || categoriesData;
+      
+      // Ensure we always set arrays
+      const safeProducts = Array.isArray(productsArray) ? productsArray : [];
+      const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
+      
+      setProducts(safeProducts);
+      setFilteredProducts(safeProducts);
+      setCategories(safeCategories);
+      
+      console.log('fetchData - setProducts:', safeProducts);
+      console.log('fetchData - setFilteredProducts:', safeProducts);
+      console.log('fetchData - setCategories:', safeCategories);
     } catch (error) {
       console.error('Error fetching data:', error);
+      // Set empty arrays on error
+      setProducts([]);
+      setFilteredProducts([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -175,8 +235,8 @@ const HomeScreen = () => {
     router.push(`/product/${productId}`);
   };
 
-  const handleCategoryPress = (categoryId: string) => {
-    setSelectedCategory(selectedCategory === categoryId ? null : categoryId);
+  const handleCategoryPress = (categoryId: string | null) => {
+    setSelectedCategory(categoryId);
   };
 
   const handleCartPress = () => {
@@ -219,132 +279,145 @@ const HomeScreen = () => {
 
   // --- UI Components ---
   const renderTopBar = () => (
-    <View style={styles.topBar}>
-      <TouchableOpacity style={styles.locationBtn} onPress={handleHomeButtonPress}>
-        <Text style={styles.locationText}>{userAddress}</Text>
-        <Ionicons name="chevron-down" size={18} color="#333" />
-      </TouchableOpacity>
-      <View style={styles.topIcons}>
-        <TouchableOpacity style={styles.iconBtn}>
-          <Ionicons name="notifications-outline" size={22} color="#333" />
-          {/* Notification badge example */}
-          {/* <View style={styles.notifBadge}><Text style={styles.notifBadgeText}>1</Text></View> */}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} onPress={handleCartPress}>
-          <Ionicons name="cart-outline" size={22} color="#333" />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+    <View style={{ paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#fff' }}>
+      {/* Search Bar */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f2f2f2',
+        borderRadius: 32,
+        paddingHorizontal: 16,
+        height: 44,
+        marginBottom: 8,
+      }}>
+        <Ionicons name="search-outline" size={22} color="#666" style={{ marginRight: 8 }} />
+        <TextInput
+          style={{ flex: 1, fontSize: 16, color: '#222', paddingVertical: 0, backgroundColor: 'transparent' }}
+          placeholder="Search"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#888"
+          returnKeyType="search"
+        />
       </View>
     </View>
   );
 
-  const renderSearchBar = () => (
-    <View style={styles.searchBar}>
-      <Ionicons name="search-outline" size={20} color="#666" style={{ marginRight: 8 }} />
-      <TextInput
-        style={styles.searchInputUber}
-        placeholder="Search"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholderTextColor="#666"
-      />
-      <TouchableOpacity>
-        <Ionicons name="options-outline" size={20} color="#666" />
-      </TouchableOpacity>
+  // --- Category Filter Row ---
+  const renderCategoryFilterRow = () => (
+    <View style={{ backgroundColor: '#fff', paddingVertical: 4 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }}>
+        {/* All filter */}
+        <TouchableOpacity onPress={() => handleCategoryPress(null)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
+          <Text style={{ fontSize: 24, marginBottom: 2 }}>🔎</Text>
+          <Text style={{ fontSize: 14, color: selectedCategory === null ? '#111' : '#888', fontWeight: selectedCategory === null ? 'bold' : 'normal' }}>All</Text>
+        </TouchableOpacity>
+        {categories.map((cat) => (
+          <TouchableOpacity key={cat._id} onPress={() => handleCategoryPress(cat._id)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
+            <Text style={{ fontSize: 24, marginBottom: 2 }}>{CATEGORY_EMOJIS[cat.name] || '🍽️'}</Text>
+            <Text style={{ fontSize: 14, color: selectedCategory === cat._id ? '#111' : '#888', fontWeight: selectedCategory === cat._id ? 'bold' : 'normal' }}>{cat.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
     </View>
   );
 
-  const renderCategoryIcon = ({ item }) => {
-    console.log('Category name:', item.name); // Debug log
+  // --- Featured and Suggestions (mock for now) ---
+  const safeFilteredProducts = Array.isArray(filteredProducts) ? filteredProducts : [];
+  console.log('HomeScreen - filteredProducts:', filteredProducts);
+  console.log('HomeScreen - safeFilteredProducts:', safeFilteredProducts);
+  
+  const featuredProducts = safeFilteredProducts.slice(0, 5);
+  const suggestedProducts = safeFilteredProducts.slice(5, 10);
+
+  const renderProductTile = ({ item }: { item: Product }) => {
+    const imageUrl = item.images && item.images.length > 0
+      ? item.images[0].startsWith('http')
+        ? item.images[0]
+        : `${API_BASE_URL.replace('/api', '')}${item.images[0]}?_t=${Date.now()}`
+      : 'https://via.placeholder.com/150';
     
-    const getCategoryIcon = (categoryName) => {
-      const name = categoryName.toLowerCase();
-      console.log('Processing category:', name); // Debug log
-      
-      if (name.includes('electronics') || name.includes('phone') || name.includes('mobile') || name.includes('smartphone')) {
-        return 'phone-portrait-outline';
-      } else if (name.includes('fashion') || name.includes('clothing') || name.includes('apparel') || name.includes('wear')) {
-        return 'shirt-outline';
-      } else if (name.includes('food') || name.includes('grocery') || name.includes('fresh') || name.includes('vegetables') || name.includes('fruits')) {
-        return 'restaurant-outline';
-      } else if (name.includes('home') || name.includes('kitchen') || name.includes('household') || name.includes('appliances')) {
-        return 'home-outline';
-      } else if (name.includes('beauty') || name.includes('cosmetics') || name.includes('personal') || name.includes('care')) {
-        return 'rose-outline';
-      } else if (name.includes('sports') || name.includes('fitness') || name.includes('outdoor') || name.includes('exercise')) {
-        return 'fitness-outline';
-      } else if (name.includes('books') || name.includes('stationery') || name.includes('office') || name.includes('paper')) {
-        return 'library-outline';
-      } else if (name.includes('toys') || name.includes('games') || name.includes('entertainment') || name.includes('play')) {
-        return 'game-controller-outline';
-      } else if (name.includes('automotive') || name.includes('car') || name.includes('vehicle') || name.includes('auto')) {
-        return 'car-outline';
-      } else if (name.includes('health') || name.includes('medical') || name.includes('pharmacy') || name.includes('medicine')) {
-        return 'medical-outline';
-      } else if (name.includes('dairy') || name.includes('milk') || name.includes('cheese')) {
-        return 'nutrition-outline';
-      } else if (name.includes('beverages') || name.includes('drinks') || name.includes('juice') || name.includes('soda')) {
-        return 'cafe-outline';
-      } else {
-        console.log('Using default icon for:', name); // Debug log
-        return 'grid-outline'; // default icon
-      }
-    };
-
-    const iconName = getCategoryIcon(item.name);
-    console.log('Selected icon:', iconName); // Debug log
-
+    console.log(`Rendering product ${item.name} with image: ${imageUrl}`);
+    
     return (
-      <TouchableOpacity
-        style={[styles.categoryUber, selectedCategory === item._id && styles.categoryUberSelected]}
-        onPress={() => setSelectedCategory(selectedCategory === item._id ? null : item._id)}
-      >
-        <View style={styles.categoryIconDynamic}>
-          <Ionicons 
-            name={iconName} 
-            size={28} 
-            color={selectedCategory === item._id ? '#fff' : '#007AFF'} 
-          />
+      <TouchableOpacity style={styles.productTile} onPress={() => handleProductPress(item._id)}>
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.productTileImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log('Image failed to load for product:', item.name, 'Image:', imageUrl, 'Error:', error);
+          }}
+          onLoad={() => {
+            console.log('Image loaded successfully for product:', item.name, 'Image:', imageUrl);
+          }}
+          defaultSource={{ uri: 'https://via.placeholder.com/150' }}
+        />
+        <View style={styles.productTileContent}>
+          <Text style={styles.productTileName} numberOfLines={2}>{item.name}</Text>
+          <Text style={styles.productTileBrand} numberOfLines={1}>{item.brand?.name}</Text>
+          <Text style={styles.productTilePrice}>₹{item.price}</Text>
         </View>
-        <Text style={[styles.categoryUberLabel, selectedCategory === item._id && styles.categoryUberLabelSelected]}>{item.name}</Text>
       </TouchableOpacity>
     );
   };
 
-  const renderFilterBtn = ({ item, index }) => (
-    <TouchableOpacity key={index} style={styles.filterBtn}>
-      <Ionicons name={item.icon} size={16} color="#333" style={{ marginRight: 4 }} />
-      <Text style={styles.filterBtnText}>{item.label}</Text>
-    </TouchableOpacity>
-  );
+  const renderProductCard = ({ item }: { item: Product }) => {
+    const imageUrl = item.images && item.images.length > 0
+      ? item.images[0].startsWith('http')
+        ? item.images[0]
+        : `${API_BASE_URL.replace('/api', '')}${item.images[0]}?_t=${Date.now()}`
+      : 'https://via.placeholder.com/150';
+    
+    return (
+      <TouchableOpacity style={styles.productCard} onPress={() => handleProductPress(item._id)}>
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.productCardImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log('Image failed to load for product:', item.name, 'Image:', imageUrl, 'Error:', error);
+          }}
+          onLoad={() => {
+            console.log('Image loaded successfully for product:', item.name, 'Image:', imageUrl);
+          }}
+          defaultSource={{ uri: 'https://via.placeholder.com/150' }}
+        />
+        <View style={styles.productCardContent}>
+          <Text style={styles.productCardName} numberOfLines={2}>{item.name}</Text>
+          <Text style={styles.productCardBrand} numberOfLines={1}>{item.brand?.name}</Text>
+          <Text style={styles.productCardPrice}>₹{item.price}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
-  // --- Featured and Suggestions (mock for now) ---
-  const featuredProducts = filteredProducts.slice(0, 5);
-  const suggestedProducts = filteredProducts.slice(5, 10);
-
-  const renderHorizontalProduct = ({ item }) => (
-    <TouchableOpacity style={styles.horizontalProductCard} onPress={() => handleProductPress(item._id)}>
-      <Image
-        source={{
-          uri:
-            item.images && item.images.length > 0
-              ? item.images[0].startsWith('http')
-                ? item.images[0]
-                : `${API_BASE_URL.replace('/api', '')}${item.images[0]}`
-              : 'https://via.placeholder.com/150'
-        }}
-        style={styles.horizontalProductImageFixed}
-        resizeMode="cover"
-      />
-      <Text style={styles.horizontalProductName} numberOfLines={1}>{item.name}</Text>
-      <Text style={styles.horizontalProductBrand}>{item.brand?.name}</Text>
-      <Text style={styles.horizontalProductPrice}>₹{item.price}</Text>
-    </TouchableOpacity>
-  );
+  const renderCategorySection = (category: Category) => {
+    const categoryProducts = products.filter(product => product.category?._id === category._id);
+    
+    if (categoryProducts.length === 0) return null;
+    
+    return (
+      <View key={category._id} style={styles.categorySection}>
+        <View style={styles.categorySectionHeader}>
+          <Text style={styles.categorySectionTitle}>
+            {category.name}
+          </Text>
+          <TouchableOpacity onPress={() => handleCategoryPress(category._id)}>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={categoryProducts}
+          renderItem={renderProductCard}
+          keyExtractor={item => item._id}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryProductList}
+        />
+      </View>
+    );
+  };
 
   // --- Main Render ---
   if (loading) {
@@ -362,27 +435,34 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-        {renderTopBar()}
-        {renderSearchBar()}
-        <View style={styles.categoryUberRow}>
-          <FlatList
-            data={categories}
-            renderItem={renderCategoryIcon}
-            keyExtractor={item => item._id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
+      <ScrollView 
+        contentContainerStyle={{ paddingBottom: 100 }} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#007AFF']}
+            tintColor="#007AFF"
           />
+        }
+      >
+        {renderTopBar()}
+        {renderCategoryFilterRow()}
+        
+        {/* Category Sections */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          {selectedCategory ? (
+            // Show only the selected category
+            (() => {
+              const selectedCat = categories.find(cat => cat._id === selectedCategory);
+              return selectedCat ? renderCategorySection(selectedCat) : null;
+            })()
+          ) : (
+            // Show all categories when no filter is selected
+            categories.map(category => renderCategorySection(category))
+          )}
         </View>
-        <Text style={styles.sectionUberTitle}>Featured Products</Text>
-        <FlatList
-          data={filteredProducts.slice(0, 10)}
-          renderItem={renderHorizontalProduct}
-          keyExtractor={item => item._id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: 16, paddingBottom: 8 }}
-        />
       </ScrollView>
       {showCartNotification && (
         <View style={styles.cartNotification}>
@@ -517,42 +597,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 16,
-  },
-  horizontalProductCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginHorizontal: 8,
-    marginBottom: 16,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  horizontalProductImageFixed: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  horizontalProductName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  horizontalProductBrand: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  horizontalProductPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
   },
   cartNotification: {
     position: 'absolute',
@@ -592,6 +636,105 @@ const styles = StyleSheet.create({
   },
   categoryUberLabelSelected: {
     color: '#fff',
+  },
+  productTile: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginHorizontal: 4,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    maxWidth: '48%',
+  },
+  productTileImage: {
+    width: '100%',
+    height: 160,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  productTileContent: {
+    padding: 12,
+  },
+  productTileName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  productTileBrand: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 6,
+  },
+  productTilePrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  productCard: {
+    width: 150,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  productCardImage: {
+    width: '100%',
+    height: 120,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  productCardContent: {
+    padding: 12,
+  },
+  productCardName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  productCardBrand: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 6,
+  },
+  productCardPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  categorySection: {
+    marginBottom: 20,
+  },
+  categorySectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  categorySectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  categoryProductList: {
+    paddingHorizontal: 8,
   },
 });
 

@@ -1,50 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
   ScrollView,
-  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ProfileScreen() {
-  const { user, updateProfile, logout } = useAuth();
-  const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
-    address: user?.address || '',
-    city: user?.city || '',
-    state: user?.state || '',
-    pincode: user?.pincode || '',
-  });
-
-  const handleUpdateProfile = async () => {
-    if (!formData.name || !formData.email || !formData.phone) {
-      Alert.alert('Error', 'Name, email, and phone are required');
-      return;
-    }
-
-    setLoading(true);
-    const result = await updateProfile(formData);
-    setLoading(false);
-
-    if (result.success) {
-      Alert.alert('Success', 'Profile updated successfully');
-      setEditing(false);
-    } else {
-      Alert.alert('Error', result.error);
-    }
-  };
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
     Alert.alert(
@@ -64,137 +33,82 @@ export default function ProfileScreen() {
     );
   };
 
-  const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const handleProfileManagement = () => {
+    router.push('/profile-management');
+  };
+
+  const handleOrders = () => {
+    router.push('/orders');
   };
 
   return (
     <SafeAreaView style={styles.safeContainer}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Profile</Text>
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => setEditing(!editing)}
-          >
-            <Text style={styles.editButtonText}>
-              {editing ? 'Cancel' : 'Edit'}
-            </Text>
-          </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Full Name *</Text>
-            <TextInput
-              style={[styles.input, !editing && styles.inputDisabled]}
-              value={formData.name}
-              onChangeText={(value) => updateField('name', value)}
-              placeholder="Enter your full name"
-              editable={editing}
-            />
+        <ScrollView 
+          style={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.profileCard}>
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </Text>
+              </View>
+            </View>
+            
+            <Text style={styles.userName}>{user?.name || 'User Name'}</Text>
+            <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email *</Text>
-            <TextInput
-              style={[styles.input, !editing && styles.inputDisabled]}
-              value={formData.email}
-              onChangeText={(value) => updateField('email', value)}
-              placeholder="Enter your email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={editing}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Phone Number *</Text>
-            <TextInput
-              style={[styles.input, !editing && styles.inputDisabled]}
-              value={formData.phone}
-              onChangeText={(value) => updateField('phone', value)}
-              placeholder="Enter your phone number"
-              keyboardType="phone-pad"
-              editable={editing}
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Address Information</Text>
-          <Text style={styles.sectionSubtitle}>
-            Address is required for placing orders
-          </Text>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Address</Text>
-            <TextInput
-              style={[styles.input, styles.textArea, !editing && styles.inputDisabled]}
-              value={formData.address}
-              onChangeText={(value) => updateField('address', value)}
-              placeholder="Enter your address"
-              multiline
-              numberOfLines={3}
-              editable={editing}
-            />
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.inputContainer, styles.halfWidth]}>
-              <Text style={styles.label}>City</Text>
-              <TextInput
-                style={[styles.input, !editing && styles.inputDisabled]}
-                value={formData.city}
-                onChangeText={(value) => updateField('city', value)}
-                placeholder="City"
-                editable={editing}
-              />
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Personal Information</Text>
+            
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Full Name</Text>
+              <Text style={styles.infoValue}>{user?.name || 'Not provided'}</Text>
             </View>
 
-            <View style={[styles.inputContainer, styles.halfWidth]}>
-              <Text style={styles.label}>State</Text>
-              <TextInput
-                style={[styles.input, !editing && styles.inputDisabled]}
-                value={formData.state}
-                onChangeText={(value) => updateField('state', value)}
-                placeholder="State"
-                editable={editing}
-              />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValue}>{user?.email || 'Not provided'}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Phone Number</Text>
+              <Text style={styles.infoValue}>{user?.phone || 'Not provided'}</Text>
             </View>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Pincode</Text>
-            <TextInput
-              style={[styles.input, !editing && styles.inputDisabled]}
-              value={formData.pincode}
-              onChangeText={(value) => updateField('pincode', value)}
-              placeholder="Enter pincode"
-              keyboardType="numeric"
-              editable={editing}
-            />
-          </View>
-        </View>
-
-        {editing && (
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleUpdateProfile}
-            disabled={loading}
+            style={styles.profileManagementButton}
+            onPress={handleProfileManagement}
           >
-            <Text style={styles.buttonText}>
-              {loading ? 'Updating...' : 'Update Profile'}
-            </Text>
+            <Ionicons name="settings-outline" size={20} color="#007AFF" />
+            <Text style={styles.profileManagementButtonText}>Profile Management</Text>
+            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
           </TouchableOpacity>
-        )}
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity
+            style={styles.ordersButton}
+            onPress={handleOrders}
+          >
+            <Ionicons name="receipt-outline" size={20} color="#007AFF" />
+            <Text style={styles.ordersButtonText}>My Orders</Text>
+            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color="#fff" />
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -204,6 +118,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+    paddingBottom: 20,
   },
   header: {
     flexDirection: 'row',
@@ -219,16 +134,50 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  editButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#007AFF',
-    borderRadius: 6,
+  profileCard: {
+    backgroundColor: '#fff',
+    margin: 16,
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  editButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  userEmail: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 20,
   },
   section: {
     backgroundColor: '#fff',
@@ -247,63 +196,59 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-  },
-  inputDisabled: {
-    backgroundColor: '#f9f9f9',
-    color: '#666',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  row: {
+  infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  halfWidth: {
-    width: '48%',
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    margin: 16,
-  },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  buttonText: {
-    color: '#fff',
+  infoLabel: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#333',
+  },
+  infoValue: {
+    fontSize: 16,
+    color: '#666',
+  },
+  profileManagementButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+    padding: 16,
+    borderRadius: 8,
+    margin: 16,
+    marginBottom: 20,
+  },
+  profileManagementButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginLeft: 10,
+  },
+  ordersButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+    padding: 16,
+    borderRadius: 8,
+    margin: 16,
+    marginBottom: 20,
+  },
+  ordersButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginLeft: 10,
   },
   logoutButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#FF3B30',
     padding: 16,
     borderRadius: 8,
-    alignItems: 'center',
     margin: 16,
     marginBottom: 32,
   },
@@ -311,5 +256,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 10,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 32,
   },
 }); 

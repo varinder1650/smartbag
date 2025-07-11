@@ -19,10 +19,21 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
+interface Product {
+  _id: string;
+  name: string;
+  description: string;
+  price: number;
+  images: string[];
+  category: { name: string; _id: string };
+  brand: { name: string; _id: string };
+  stock: number;
+}
+
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams();
   const { token } = useAuth();
-  const [product, setProduct] = useState(null);
+  const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showCartNotification, setShowCartNotification] = useState(false);
@@ -33,7 +44,8 @@ export default function ProductDetailScreen() {
 
   const fetchProduct = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/products/${id}`);
+      const timestamp = Date.now();
+      const response = await fetch(`${API_BASE_URL}/products/${id}?_t=${timestamp}`);
       const data = await response.json();
       
       if (response.ok) {
@@ -117,10 +129,17 @@ export default function ProductDetailScreen() {
               uri:
                 product.images[selectedImageIndex] && product.images[selectedImageIndex].startsWith('http')
                   ? product.images[selectedImageIndex]
-                  : `${API_BASE_URL.replace('/api', '')}${product.images[selectedImageIndex]}`
+                  : `${API_BASE_URL.replace('/api', '')}${product.images[selectedImageIndex]}?_t=${Date.now()}`
             }}
             style={styles.mainImage}
             resizeMode="cover"
+            onError={(error) => {
+              console.log('Main image failed to load for product:', product.name, 'Image:', product.images?.[selectedImageIndex], 'Error:', error);
+            }}
+            onLoad={() => {
+              console.log('Main image loaded successfully for product:', product.name, 'Image:', product.images?.[selectedImageIndex]);
+            }}
+            defaultSource={{ uri: 'https://via.placeholder.com/400x300' }}
           />
           
           {/* Image Thumbnails */}
@@ -140,10 +159,17 @@ export default function ProductDetailScreen() {
                       uri:
                         image && image.startsWith('http')
                           ? image
-                          : `${API_BASE_URL.replace('/api', '')}${image}`
+                          : `${API_BASE_URL.replace('/api', '')}${image}?_t=${Date.now()}`
                     }}
                     style={styles.thumbnailImage}
                     resizeMode="cover"
+                    onError={(error) => {
+                      console.log('Thumbnail image failed to load for product:', product.name, 'Image:', image, 'Error:', error);
+                    }}
+                    onLoad={() => {
+                      console.log('Thumbnail image loaded successfully for product:', product.name, 'Image:', image);
+                    }}
+                    defaultSource={{ uri: 'https://via.placeholder.com/60x60' }}
                   />
                 </TouchableOpacity>
               ))}

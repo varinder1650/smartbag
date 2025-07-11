@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const auth = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 
 // Get user address
-router.get('/address', auth, async (req, res) => {
+router.get('/address', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('address');
     res.json({ address: user.address || null });
@@ -15,7 +15,7 @@ router.get('/address', auth, async (req, res) => {
 });
 
 // Save user address
-router.post('/address', auth, async (req, res) => {
+router.post('/address', protect, async (req, res) => {
   try {
     const { address, latitude, longitude } = req.body;
 
@@ -47,7 +47,7 @@ router.post('/address', auth, async (req, res) => {
 });
 
 // Update user address
-router.put('/address', auth, async (req, res) => {
+router.put('/address', protect, async (req, res) => {
   try {
     const { address, latitude, longitude } = req.body;
 

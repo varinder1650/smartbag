@@ -16,10 +16,15 @@ const cartSchema = new mongoose.Schema({
       quantity: {
         type: Number,
         required: true,
-        default: 1,
+        min: 1,
       },
     },
   ],
 }, { timestamps: true });
+
+// Add indexes for better query performance
+cartSchema.index({ user: 1 });
+cartSchema.index({ 'items.product': 1 });
+cartSchema.index({ updatedAt: -1 });
 
 module.exports = mongoose.model('Cart', cartSchema); 

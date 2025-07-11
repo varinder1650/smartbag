@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Set up axios defaults
-  axios.defaults.baseURL = 'http://localhost:3001/api';
+  axios.defaults.baseURL = 'http://10.0.0.74:3001/api';
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');

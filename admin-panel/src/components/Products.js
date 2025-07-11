@@ -70,42 +70,64 @@ const Products = () => {
 
   const fetchData = async () => {
     try {
+      console.log('=== FETCHING DATA ===');
+      console.log('Current timestamp:', Date.now());
+      
+      const timestamp = Date.now();
       const [productsRes, categoriesRes, brandsRes] = await Promise.all([
-        axios.get('/products'),
-        axios.get('/categories'),
-        axios.get('/brands'),
+        axios.get(`/products?_t=${timestamp}`),
+        axios.get(`/categories?_t=${timestamp}`),
+        axios.get(`/brands?_t=${timestamp}`),
       ]);
 
-      // Ensure we have valid arrays
-      const products = Array.isArray(productsRes.data) ? productsRes.data : [];
-      const categories = Array.isArray(categoriesRes.data) ? categoriesRes.data : [];
-      const brands = Array.isArray(brandsRes.data) ? brandsRes.data : [];
+      console.log('API Calls completed successfully');
+      console.log('Products Response Status:', productsRes.status);
+      console.log('Categories Response Status:', categoriesRes.status);
+      console.log('Brands Response Status:', brandsRes.status);
+
+      console.log('Products Response:', productsRes.data);
+      console.log('Categories Response:', categoriesRes.data);
+      console.log('Brands Response:', brandsRes.data);
+
+      // Extract data from nested structure
+      const productsArray = productsRes.data.products || productsRes.data;
+      const categoriesArray = categoriesRes.data.categories || categoriesRes.data;
+      const brandsArray = brandsRes.data.brands || brandsRes.data;
+
+      console.log('Extracted Products:', productsArray);
+      console.log('Extracted Categories:', categoriesArray);
+      console.log('Extracted Brands:', brandsArray);
+
+      // Ensure we always set arrays
+      const safeProducts = Array.isArray(productsArray) ? productsArray : [];
+      const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
+      const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
+
+      console.log('Safe Products:', safeProducts);
+      console.log('Safe Categories:', safeCategories);
+      console.log('Safe Brands:', safeBrands);
 
       // Process products to add categoryName and brandName fields
-      const processedProducts = products.map(product => ({
+      const processedProducts = safeProducts.map(product => ({
         ...product,
-        categoryName: product.category ? (typeof product.category === 'object' ? product.category.name : product.category) : 'N/A',
-        brandName: product.brand ? (typeof product.brand === 'object' ? product.brand.name : product.brand) : 'N/A'
+        categoryName: product.category?.name || 'Unknown Category',
+        brandName: product.brand?.name || 'Unknown Brand'
       }));
 
-      console.log('Processed products:', processedProducts);
-      if (processedProducts.length > 0) {
-        console.log('First product details:', {
-          name: processedProducts[0].name,
-          price: processedProducts[0].price,
-          stock: processedProducts[0].stock,
-          createdAt: processedProducts[0].createdAt,
-          priceType: typeof processedProducts[0].price,
-          stockType: typeof processedProducts[0].stock,
-          createdAtType: typeof processedProducts[0].createdAt
-        });
-      }
+      console.log('Processed Products:', processedProducts);
+      console.log('=== SETTING STATE ===');
+      console.log('Setting products:', processedProducts.length);
+      console.log('Setting categories:', safeCategories.length);
+      console.log('Setting brands:', safeBrands.length);
 
       setProducts(processedProducts);
-      setCategories(categories);
-      setBrands(brands);
+      setCategories(safeCategories);
+      setBrands(safeBrands);
+      
+      console.log('=== STATE SET COMPLETE ===');
     } catch (error) {
       console.error('Error fetching data:', error);
+      console.error('Error details:', error.response?.data);
       setError('Error fetching data');
       setProducts([]);
       setCategories([]);
@@ -199,7 +221,14 @@ const Products = () => {
       setOpenDialog(false);
       setImageFiles([]);
       setExistingImages([]);
-      fetchData();
+      
+      // Force a complete refresh with cache busting
+      console.log('Forcing data refresh after product update...');
+      await fetchData();
+      
+      // Force a re-render by updating a state variable
+      setProducts(prev => [...prev]);
+      
     } catch (error) {
       setError(error.response?.data?.message || 'Error saving product');
     }
@@ -257,10 +286,14 @@ const Products = () => {
           <Box sx={{ display: 'flex', gap: 1 }}>
             {images.slice(0, 3).map((image, index) => (
               <img
-                key={index}
-                src={`http://localhost:3001${image}`}
+                key={`${params.row._id}-${index}-${Date.now()}`}
+                src={`http://10.0.0.74:3001${image}?_t=${Date.now()}`}
                 alt={`Product ${index + 1}`}
                 style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
+                onError={(e) => {
+                  console.error('Image failed to load:', image);
+                  e.target.style.display = 'none';
+                }}
               />
             ))}
             {images.length > 3 && (
@@ -315,6 +348,13 @@ const Products = () => {
         </Button>
       </Box>
 
+      {/* Debug Info */}
+      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+        <Typography variant="body2">
+          Debug Info: Loading={loading.toString()}, Products={products.length}, Categories={categories.length}, Brands={brands.length}
+        </Typography>
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
@@ -332,10 +372,7 @@ const Products = () => {
           <DataGrid
             rows={products}
             columns={columns}
-            getRowId={(row) => {
-              console.log('Row ID for:', row.name, 'ID:', row._id || row.id);
-              return row._id || row.id || Math.random().toString();
-            }}
+            getRowId={(row) => row._id || row.id || Math.random().toString()}
             loading={loading}
             pageSizeOptions={[10, 25, 50]}
             initialState={{
@@ -494,8 +531,12 @@ const Products = () => {
                             <CardMedia
                               component="img"
                               height="140"
-                              image={`http://localhost:3001${image}`}
+                              image={`http://10.0.0.74:3001${image}?_t=${Date.now()}`}
                               alt={`Current image ${index + 1}`}
+                              onError={(e) => {
+                                console.error('Existing image failed to load:', image);
+                                e.target.style.display = 'none';
+                              }}
                             />
                             <CardContent sx={{ p: 1 }}>
                               <IconButton
