@@ -12,39 +12,85 @@ dotenv.config();
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// Security middleware with custom CSP for images
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      fontSrc: ["'self'", "https:", "data:"],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+}));
 
 // Compression middleware
 app.use(compression());
 
-// Rate limiting
+// Rate limiting - more lenient for admin panel
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs (increased for testing)
+  max: 2000, // limit each IP to 2000 requests per windowMs (increased for admin panel)
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/api/health';
+  }
 });
 
 // Apply rate limiting to all routes
 app.use(limiter);
 
-// More strict rate limiting for auth routes
+// More lenient rate limiting for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 requests per windowMs (increased for testing)
+  max: 100, // limit each IP to 100 requests per windowMs (increased for admin panel)
   message: 'Too many authentication attempts, please try again later.',
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/api/health';
+  }
 });
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://10.0.0.74:3000',
+      'http://10.0.0.74:3001',
+      // Add your deployed frontend URLs here
+      // 'https://your-admin-panel.vercel.app',
+      // 'https://your-mobile-app.expo.dev'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(cors(corsOptions));
 
 // Performance monitoring middleware
 app.use((req, res, next) => {
@@ -58,8 +104,44 @@ app.use((req, res, next) => {
 
 app.use(morgan('dev'));
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Specific route for serving images with proper headers
+app.get('/uploads/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, 'uploads', filename);
+  
+  // Set proper headers for images
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  res.setHeader('Content-Type', getContentType(filename));
+  
+  // Use express.static-like behavior without conflicts
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Error serving image:', filename, err.message);
+      // Don't try to send error response if headers already sent
+      if (!res.headersSent) {
+        res.status(404).send('Image not found');
+      }
+    }
+  });
+});
+
+// Helper function to determine content type
+function getContentType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  const contentTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.avif': 'image/avif',
+    '.svg': 'image/svg+xml'
+  };
+  return contentTypes[ext] || 'application/octet-stream';
+}
 
 // Root route
 app.get('/', (req, res) => {

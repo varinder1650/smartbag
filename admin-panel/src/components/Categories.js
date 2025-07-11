@@ -10,6 +10,7 @@ import {
   Typography,
   IconButton,
   Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -17,7 +18,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import axios from 'axios';
+import { apiService, extractData, handleApiError } from '../services/api';
 
 const Categories = () => {
   const [categories, setCategories] = useState([]);
@@ -26,24 +27,31 @@ const Categories = () => {
   const [editingCategory, setEditingCategory] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [formData, setFormData] = useState({ name: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+  });
 
   useEffect(() => {
-    fetchCategories();
+    fetchData();
   }, []);
 
-  const fetchCategories = async () => {
+  const fetchData = async () => {
     try {
-      const response = await axios.get('/categories');
+      setLoading(true);
+      setError('');
       
-      // Extract data from nested structure
-      const categoriesData = response.data.categories || response.data;
-      const categories = Array.isArray(categoriesData) ? categoriesData : [];
+      const response = await apiService.getCategories();
+      const categoriesArray = extractData(response);
+      const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
       
-      setCategories(categories);
+      setCategories(safeCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
-      setError('Error fetching categories');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
       setCategories([]);
     } finally {
       setLoading(false);
@@ -52,75 +60,75 @@ const Categories = () => {
 
   const handleAdd = () => {
     setEditingCategory(null);
-    setFormData({ name: '' });
+    setFormData({
+      name: '',
+      description: '',
+    });
+    setError('');
+    setSuccess('');
     setOpenDialog(true);
   };
 
   const handleEdit = (category) => {
     setEditingCategory(category);
-    setFormData({ name: category.name });
+    setFormData({
+      name: category.name || '',
+      description: category.description || '',
+    });
+    setError('');
+    setSuccess('');
     setOpenDialog(true);
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
-        await axios.delete(`/categories/${id}`);
+        await apiService.deleteCategory(id);
         setSuccess('Category deleted successfully');
-        fetchCategories();
+        fetchData();
       } catch (error) {
-        setError('Error deleting category');
+        const errorResult = handleApiError(error);
+        setError(errorResult.message);
       }
     }
   };
 
   const handleSubmit = async () => {
     try {
+      setSubmitting(true);
+      setError('');
+      setSuccess('');
+
       if (editingCategory) {
-        await axios.put(`/categories/${editingCategory._id}`, formData);
+        await apiService.updateCategory(editingCategory._id, formData);
         setSuccess('Category updated successfully');
       } else {
-        await axios.post('/categories', formData);
+        await apiService.createCategory(formData);
         setSuccess('Category created successfully');
       }
+
       setOpenDialog(false);
-      fetchCategories();
+      fetchData();
     } catch (error) {
-      setError(error.response?.data?.message || 'Error saving category');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const columns = [
-    { 
-      field: 'name', 
-      headerName: 'Name', 
-      width: 300,
-    },
-    { 
-      field: 'createdAt', 
-      headerName: 'Created', 
-      width: 200,
-      renderCell: (params) => {
-        const value = params.row.createdAt;
-        if (!value) return 'N/A';
-        try {
-          return new Date(value).toLocaleDateString();
-        } catch (error) {
-          return 'Invalid Date';
-        }
-      }
-    },
+    { field: 'name', headerName: 'Name', width: 200 },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 150,
-      sortable: false,
       renderCell: (params) => (
         <Box>
-          <IconButton onClick={() => handleEdit(params.row)} color="primary">
+          <IconButton onClick={() => handleEdit(params.row)} size="small">
             <EditIcon />
           </IconButton>
-          <IconButton onClick={() => handleDelete(params.row._id)} color="error">
+          <IconButton onClick={() => handleDelete(params.row._id)} size="small" color="error">
             <DeleteIcon />
           </IconButton>
         </Box>
@@ -128,11 +136,23 @@ const Categories = () => {
     },
   ];
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ mt: 8 }}>
+    <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Categories</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAdd}
+        >
           Add Category
         </Button>
       </Box>
@@ -149,51 +169,51 @@ const Categories = () => {
         </Alert>
       )}
 
-      <Box sx={{ height: 600, width: '100%' }}>
-        {categories && categories.length > 0 ? (
-          <DataGrid
-            rows={categories}
-            columns={columns}
-            getRowId={(row) => row._id || row.id || Math.random().toString()}
-            loading={loading}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: {
-                paginationModel: { page: 0, pageSize: 10 },
-              },
-            }}
-            onError={(error) => {
-              console.error('DataGrid error:', error);
-              setError('Error displaying data grid');
-            }}
-          />
-        ) : (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <Typography variant="h6" color="textSecondary">
-              {loading ? 'Loading categories...' : 'No categories found'}
-            </Typography>
-          </Box>
-        )}
-      </Box>
+      <DataGrid
+        rows={categories}
+        columns={columns}
+        pageSize={10}
+        rowsPerPageOptions={[10, 25, 50]}
+        disableSelectionOnClick
+        autoHeight
+        getRowId={(row) => row._id}
+      />
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+      {/* Add/Edit Dialog */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingCategory ? 'Edit Category' : 'Add New Category'}
+          {editingCategory ? 'Edit Category' : 'Add Category'}
         </DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Category Name"
-            fullWidth
-            value={formData.name}
-            onChange={(e) => setFormData({ name: e.target.value })}
-          />
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Description"
+              multiline
+              rows={3}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingCategory ? 'Update' : 'Create'}
+          <Button onClick={() => setOpenDialog(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={submitting || !formData.name}
+          >
+            {submitting ? <CircularProgress size={20} /> : (editingCategory ? 'Update' : 'Create')}
           </Button>
         </DialogActions>
       </Dialog>

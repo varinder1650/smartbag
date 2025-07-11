@@ -16,8 +16,25 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Set up axios defaults
-  axios.defaults.baseURL = 'http://10.0.0.74:3001/api';
+  // Set up axios defaults with environment variable support
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001/api';
+  axios.defaults.baseURL = apiBaseUrl;
+
+  // Add request interceptor for better error handling
+  axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 429) {
+        console.warn('Rate limit exceeded, retrying in 2 seconds...');
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(axios.request(error.config));
+          }, 2000);
+        });
+      }
+      return Promise.reject(error);
+    }
+  );
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -36,6 +53,7 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data[0]); // For now, just get the first user
       setIsAuthenticated(true);
     } catch (error) {
+      console.error('Auth check failed:', error);
       localStorage.removeItem('adminToken');
       delete axios.defaults.headers.common['Authorization'];
     } finally {
@@ -62,6 +80,7 @@ export const AuthProvider = ({ children }) => {
         return { success: false, message: 'Admin access required' };
       }
     } catch (error) {
+      console.error('Login error:', error);
       return {
         success: false,
         message: error.response?.data?.message || 'Login failed',

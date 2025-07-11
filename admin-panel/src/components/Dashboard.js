@@ -6,6 +6,7 @@ import {
   Typography,
   Box,
   CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Inventory as ProductsIcon,
@@ -15,7 +16,7 @@ import {
   People as UsersIcon,
   TrendingUp as SalesIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+import { apiService, extractData, handleApiError } from '../services/api';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -26,6 +27,7 @@ const Dashboard = () => {
     users: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchStats();
@@ -33,23 +35,50 @@ const Dashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const [products, categories, brands, orders, users] = await Promise.all([
-        axios.get('/products'),
-        axios.get('/categories'),
-        axios.get('/brands'),
-        axios.get('/orders'),
-        axios.get('/auth/users'),
+      setLoading(true);
+      setError('');
+
+      const [productsRes, categoriesRes, brandsRes, ordersRes, usersRes] = await Promise.all([
+        apiService.getProducts(),
+        apiService.getCategories(),
+        apiService.getBrands(),
+        apiService.getOrders(),
+        apiService.getUsers(),
       ]);
 
+      // Extract data using helper function to handle nested structures
+      const productsArray = extractData(productsRes);
+      const categoriesArray = extractData(categoriesRes);
+      const brandsArray = extractData(brandsRes);
+      const ordersArray = extractData(ordersRes);
+      const usersArray = extractData(usersRes);
+
+      // Ensure we always have arrays
+      const safeProducts = Array.isArray(productsArray) ? productsArray : [];
+      const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
+      const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
+      const safeOrders = Array.isArray(ordersArray) ? ordersArray : [];
+      const safeUsers = Array.isArray(usersArray) ? usersArray : [];
+
+      console.log('Dashboard stats:', {
+        products: safeProducts.length,
+        categories: safeCategories.length,
+        brands: safeBrands.length,
+        orders: safeOrders.length,
+        users: safeUsers.length,
+      });
+
       setStats({
-        products: products.data.length,
-        categories: categories.data.length,
-        brands: brands.data.length,
-        orders: orders.data.length,
-        users: users.data.length,
+        products: safeProducts.length,
+        categories: safeCategories.length,
+        brands: safeBrands.length,
+        orders: safeOrders.length,
+        users: safeUsers.length,
       });
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Error fetching dashboard stats:', error);
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
     } finally {
       setLoading(false);
     }
@@ -85,13 +114,19 @@ const Dashboard = () => {
   );
 
   return (
-    <Box sx={{ mt: 8 }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Dashboard
       </Typography>
       <Typography variant="body1" color="textSecondary" gutterBottom>
         Welcome to your Admin dashboard
       </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
 
       <Grid container spacing={3} sx={{ mt: 2 }}>
         <Grid item xs={12} sm={6} md={4}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Dimensions,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,8 +36,9 @@ export default function ProductDetailScreen() {
   const { token } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showCartNotification, setShowCartNotification] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     fetchProduct();
@@ -94,6 +96,56 @@ export default function ProductDetailScreen() {
     }
   };
 
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      setCurrentImageIndex(viewableItems[0].index);
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
+
+  const renderImageItem = ({ item, index }: { item: string; index: number }) => (
+    <View style={styles.imageItem}>
+      <Image
+        source={{
+          uri:
+            item && item.startsWith('http')
+              ? item
+              : `${API_BASE_URL.replace('/api', '')}${item}?_t=${Date.now()}`
+        }}
+        style={styles.carouselImage}
+        resizeMode="cover"
+        onError={(error) => {
+          console.log('Carousel image failed to load for product:', product?.name, 'Image:', item, 'Error:', error);
+        }}
+        onLoad={() => {
+          console.log('Carousel image loaded successfully for product:', product?.name, 'Image:', item);
+        }}
+        defaultSource={{ uri: 'https://via.placeholder.com/400x300' }}
+      />
+    </View>
+  );
+
+  const renderDotIndicator = () => {
+    if (!product?.images || product.images.length <= 1) return null;
+    
+    return (
+      <View style={styles.dotContainer}>
+        {product.images.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.dot,
+              currentImageIndex === index && styles.activeDot
+            ]}
+          />
+        ))}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -121,60 +173,30 @@ export default function ProductDetailScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Main Image */}
+      {/* Image Carousel */}
       {product.images && product.images.length > 0 && (
-        <View style={styles.imageContainer}>
-          <Image
-            source={{
-              uri:
-                product.images[selectedImageIndex] && product.images[selectedImageIndex].startsWith('http')
-                  ? product.images[selectedImageIndex]
-                  : `${API_BASE_URL.replace('/api', '')}${product.images[selectedImageIndex]}?_t=${Date.now()}`
-            }}
-            style={styles.mainImage}
-            resizeMode="cover"
-            onError={(error) => {
-              console.log('Main image failed to load for product:', product.name, 'Image:', product.images?.[selectedImageIndex], 'Error:', error);
-            }}
-            onLoad={() => {
-              console.log('Main image loaded successfully for product:', product.name, 'Image:', product.images?.[selectedImageIndex]);
-            }}
-            defaultSource={{ uri: 'https://via.placeholder.com/400x300' }}
+        <View style={styles.carouselContainer}>
+          <FlatList
+            ref={flatListRef}
+            data={product.images}
+            renderItem={renderImageItem}
+            keyExtractor={(_, index) => index.toString()}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            windowSize={3}
+            removeClippedSubviews={true}
           />
-          
-          {/* Image Thumbnails */}
-          {product.images.length > 1 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailContainer}>
-              {product.images.map((image, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => setSelectedImageIndex(index)}
-                  style={[
-                    styles.thumbnail,
-                    selectedImageIndex === index && styles.selectedThumbnail
-                  ]}
-                >
-                  <Image
-                    source={{
-                      uri:
-                        image && image.startsWith('http')
-                          ? image
-                          : `${API_BASE_URL.replace('/api', '')}${image}?_t=${Date.now()}`
-                    }}
-                    style={styles.thumbnailImage}
-                    resizeMode="cover"
-                    onError={(error) => {
-                      console.log('Thumbnail image failed to load for product:', product.name, 'Image:', image, 'Error:', error);
-                    }}
-                    onLoad={() => {
-                      console.log('Thumbnail image loaded successfully for product:', product.name, 'Image:', image);
-                    }}
-                    defaultSource={{ uri: 'https://via.placeholder.com/60x60' }}
-                  />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+          {renderDotIndicator()}
         </View>
       )}
 
@@ -203,23 +225,25 @@ export default function ProductDetailScreen() {
       </View>
 
       {/* Add to Cart Button */}
-      <View style={styles.bottomContainer}>
+      <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={[styles.addToCartButton, product.stock <= 0 && styles.disabledButton]}
+          style={[
+            styles.addToCartButton,
+            product.stock === 0 && styles.disabledButton
+          ]}
           onPress={addToCart}
-          disabled={product.stock <= 0}
+          disabled={product.stock === 0}
         >
-          <Ionicons name="cart-outline" size={20} color="#fff" style={styles.buttonIcon} />
           <Text style={styles.addToCartText}>
             {product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
           </Text>
         </TouchableOpacity>
       </View>
-      
+
+      {/* Cart Notification */}
       {showCartNotification && (
-        <View style={styles.cartNotification}>
-          <Ionicons name="checkmark-circle" size={40} color="#4CAF50" />
-          <Text style={styles.cartNotificationText}>Added to cart!</Text>
+        <View style={styles.notification}>
+          <Text style={styles.notificationText}>Added to cart!</Text>
         </View>
       )}
     </ScrollView>
@@ -264,32 +288,35 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  imageContainer: {
+  carouselContainer: {
+    position: 'relative',
+    width: width,
+    height: width * 0.8,
     marginBottom: 20,
   },
-  mainImage: {
+  imageItem: {
     width: width,
     height: width * 0.8,
   },
-  thumbnailContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  thumbnail: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedThumbnail: {
-    borderColor: '#007AFF',
-  },
-  thumbnailImage: {
+  carouselImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 6,
+  },
+  dotContainer: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ccc',
+    marginHorizontal: 4,
+  },
+  activeDot: {
+    backgroundColor: '#007AFF',
   },
   productInfo: {
     padding: 16,
@@ -328,7 +355,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  bottomContainer: {
+  buttonContainer: {
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#eee',
@@ -345,15 +372,12 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#ccc',
   },
-  buttonIcon: {
-    marginRight: 8,
-  },
   addToCartText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  cartNotification: {
+  notification: {
     position: 'absolute',
     top: '50%',
     left: 20,
@@ -371,7 +395,7 @@ const styles = StyleSheet.create({
     elevation: 5,
     transform: [{ translateY: -40 }],
   },
-  cartNotificationText: {
+  notificationText: {
     color: '#4CAF50',
     fontSize: 18,
     fontWeight: '600',

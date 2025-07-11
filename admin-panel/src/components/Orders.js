@@ -3,93 +3,173 @@ import {
   Box,
   Typography,
   Alert,
+  CircularProgress,
   Chip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
+import {
+  Edit as EditIcon,
+} from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import axios from 'axios';
+import { apiService, extractData, handleApiError } from '../services/api';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [openDialog, setOpenDialog] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [status, setStatus] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchOrders();
+    fetchData();
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchData = async () => {
     try {
-      const response = await axios.get('/orders');
-      const orders = Array.isArray(response.data) ? response.data : [];
+      setLoading(true);
+      setError('');
       
-      // Process orders to add customerName field
-      const processedOrders = orders.map(order => ({
-        ...order,
-        customerName: order.user ? (typeof order.user === 'object' ? order.user.name : order.user) : 'N/A'
-      }));
+      const response = await apiService.getOrders();
+      const ordersArray = extractData(response);
+      const safeOrders = Array.isArray(ordersArray) ? ordersArray : [];
       
-      setOrders(processedOrders);
+      setOrders(safeOrders);
     } catch (error) {
       console.error('Error fetching orders:', error);
-      setError('Error fetching orders');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
       setOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleEdit = (order) => {
+    setEditingOrder(order);
+    setStatus(order.status || 'pending');
+    setError('');
+    setSuccess('');
+    setOpenDialog(true);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setSubmitting(true);
+      setError('');
+      setSuccess('');
+
+      await apiService.updateOrderStatus(editingOrder._id, status);
+      setSuccess('Order status updated successfully');
+      setOpenDialog(false);
+      fetchData();
+    } catch (error) {
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending':
+        return 'warning';
+      case 'confirmed':
+        return 'info';
+      case 'shipped':
+        return 'primary';
+      case 'delivered':
+        return 'success';
+      case 'cancelled':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
   const columns = [
-    { 
-      field: 'orderNumber', 
-      headerName: 'Order #', 
-      width: 150,
-    },
-    { 
-      field: 'customerName', 
-      headerName: 'Customer', 
+    { field: '_id', headerName: 'Order ID', width: 220 },
+    { field: 'user.name', headerName: 'Customer', width: 200, valueGetter: (params) => params.row.user?.name || 'N/A' },
+    { field: 'user.email', headerName: 'Email', width: 250, valueGetter: (params) => params.row.user?.email || 'N/A' },
+    { field: 'user.phone', headerName: 'Phone', width: 150, valueGetter: (params) => params.row.user?.phone || 'N/A' },
+    {
+      field: 'items',
+      headerName: 'Items',
       width: 200,
+      renderCell: (params) => (
+        <Box>
+          {params.value?.length || 0} items
+        </Box>
+      ),
     },
-    { 
-      field: 'totalAmount', 
-      headerName: 'Total', 
+    {
+      field: 'totalAmount',
+      headerName: 'Total',
       width: 120,
-      valueFormatter: (params) => {
-        if (params.value === null || params.value === undefined) return 'N/A';
-        return `₹${params.value}`;
-      }
+      valueFormatter: (params) => `$${params.value?.toFixed(2) || '0.00'}`,
     },
-    { 
-      field: 'status', 
-      headerName: 'Status', 
+    {
+      field: 'status',
+      headerName: 'Status',
       width: 150,
       renderCell: (params) => (
-        <Chip 
-          label={params.value} 
-          color={params.value === 'completed' ? 'success' : 'warning'}
+        <Chip
+          label={params.value}
+          color={getStatusColor(params.value)}
           size="small"
         />
-      ) 
+      ),
     },
-    { 
-      field: 'createdAt', 
-      headerName: 'Date', 
-      width: 200,
+    {
+      field: 'paymentMethod',
+      headerName: 'Payment',
+      width: 120,
+    },
+    {
+      field: 'createdAt',
+      headerName: 'Order Date',
+      width: 180,
       valueFormatter: (params) => {
-        if (!params.value) return 'N/A';
-        try {
-          return new Date(params.value).toLocaleDateString();
-        } catch (error) {
-          return 'Invalid Date';
-        }
-      }
+        return new Date(params.value).toLocaleDateString();
+      },
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 100,
+      renderCell: (params) => (
+        <IconButton onClick={() => handleEdit(params.row)} size="small">
+          <EditIcon />
+        </IconButton>
+      ),
     },
   ];
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ mt: 8 }}>
-      <Typography variant="h4" gutterBottom>
-        Orders
-      </Typography>
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">Orders</Typography>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
@@ -97,32 +177,61 @@ const Orders = () => {
         </Alert>
       )}
 
-      <Box sx={{ height: 600, width: '100%' }}>
-        {orders && orders.length > 0 ? (
-          <DataGrid
-            rows={orders}
-            columns={columns}
-            getRowId={(row) => row._id || row.id || Math.random().toString()}
-            loading={loading}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: {
-                paginationModel: { page: 0, pageSize: 10 },
-              },
-            }}
-            onError={(error) => {
-              console.error('DataGrid error:', error);
-              setError('Error displaying data grid');
-            }}
-          />
-        ) : (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <Typography variant="h6" color="textSecondary">
-              {loading ? 'Loading orders...' : 'No orders found'}
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      )}
+
+      <DataGrid
+        rows={orders}
+        columns={columns}
+        pageSize={10}
+        rowsPerPageOptions={[10, 25, 50]}
+        disableSelectionOnClick
+        autoHeight
+        getRowId={(row) => row._id}
+      />
+
+      {/* Edit Status Dialog */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Update Order Status
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Order ID: {editingOrder?._id}
             </Typography>
+            <FormControl fullWidth>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                label="Status"
+              >
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="confirmed">Confirmed</MenuItem>
+                <MenuItem value="shipped">Shipped</MenuItem>
+                <MenuItem value="delivered">Delivered</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
+              </Select>
+            </FormControl>
           </Box>
-        )}
-      </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={submitting || !status}
+          >
+            {submitting ? <CircularProgress size={20} /> : 'Update'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

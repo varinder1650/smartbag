@@ -104,11 +104,7 @@ export default function LoginScreen() {
         </View>
 
         {/* Test Credentials */}
-        <View style={styles.testCredentials}>
-          <Text style={styles.testTitle}>Test Credentials:</Text>
-          <Text style={styles.testText}>Email: test@test.com</Text>
-          <Text style={styles.testText}>Password: test123</Text>
-        </View>
+        {/* Removed test credentials box as requested */}
       </View>
     </ScrollView>
   );

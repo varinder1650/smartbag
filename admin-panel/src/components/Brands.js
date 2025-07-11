@@ -10,6 +10,7 @@ import {
   Typography,
   IconButton,
   Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -17,7 +18,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import axios from 'axios';
+import { apiService, extractData, handleApiError } from '../services/api';
 
 const Brands = () => {
   const [brands, setBrands] = useState([]);
@@ -26,24 +27,31 @@ const Brands = () => {
   const [editingBrand, setEditingBrand] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [formData, setFormData] = useState({ name: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+  });
 
   useEffect(() => {
-    fetchBrands();
+    fetchData();
   }, []);
 
-  const fetchBrands = async () => {
+  const fetchData = async () => {
     try {
-      const response = await axios.get('/brands');
+      setLoading(true);
+      setError('');
       
-      // Extract data from nested structure
-      const brandsData = response.data.brands || response.data;
-      const brands = Array.isArray(brandsData) ? brandsData : [];
+      const response = await apiService.getBrands();
+      const brandsArray = extractData(response);
+      const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
       
-      setBrands(brands);
+      setBrands(safeBrands);
     } catch (error) {
       console.error('Error fetching brands:', error);
-      setError('Error fetching brands');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
       setBrands([]);
     } finally {
       setLoading(false);
@@ -52,75 +60,75 @@ const Brands = () => {
 
   const handleAdd = () => {
     setEditingBrand(null);
-    setFormData({ name: '' });
+    setFormData({
+      name: '',
+      description: '',
+    });
+    setError('');
+    setSuccess('');
     setOpenDialog(true);
   };
 
   const handleEdit = (brand) => {
     setEditingBrand(brand);
-    setFormData({ name: brand.name });
+    setFormData({
+      name: brand.name || '',
+      description: brand.description || '',
+    });
+    setError('');
+    setSuccess('');
     setOpenDialog(true);
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this brand?')) {
       try {
-        await axios.delete(`/brands/${id}`);
+        await apiService.deleteBrand(id);
         setSuccess('Brand deleted successfully');
-        fetchBrands();
+        fetchData();
       } catch (error) {
-        setError('Error deleting brand');
+        const errorResult = handleApiError(error);
+        setError(errorResult.message);
       }
     }
   };
 
   const handleSubmit = async () => {
     try {
+      setSubmitting(true);
+      setError('');
+      setSuccess('');
+
       if (editingBrand) {
-        await axios.put(`/brands/${editingBrand._id}`, formData);
+        await apiService.updateBrand(editingBrand._id, formData);
         setSuccess('Brand updated successfully');
       } else {
-        await axios.post('/brands', formData);
+        await apiService.createBrand(formData);
         setSuccess('Brand created successfully');
       }
+
       setOpenDialog(false);
-      fetchBrands();
+      fetchData();
     } catch (error) {
-      setError(error.response?.data?.message || 'Error saving brand');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const columns = [
-    { 
-      field: 'name', 
-      headerName: 'Name', 
-      width: 300,
-    },
-    { 
-      field: 'createdAt', 
-      headerName: 'Created', 
-      width: 200,
-      renderCell: (params) => {
-        const value = params.row.createdAt;
-        if (!value) return 'N/A';
-        try {
-          return new Date(value).toLocaleDateString();
-        } catch (error) {
-          return 'Invalid Date';
-        }
-      }
-    },
+    { field: 'name', headerName: 'Name', width: 200 },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 150,
-      sortable: false,
       renderCell: (params) => (
         <Box>
-          <IconButton onClick={() => handleEdit(params.row)} color="primary">
+          <IconButton onClick={() => handleEdit(params.row)} size="small">
             <EditIcon />
           </IconButton>
-          <IconButton onClick={() => handleDelete(params.row._id)} color="error">
+          <IconButton onClick={() => handleDelete(params.row._id)} size="small" color="error">
             <DeleteIcon />
           </IconButton>
         </Box>
@@ -128,11 +136,23 @@ const Brands = () => {
     },
   ];
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ mt: 8 }}>
+    <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Brands</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAdd}
+        >
           Add Brand
         </Button>
       </Box>
@@ -149,51 +169,51 @@ const Brands = () => {
         </Alert>
       )}
 
-      <Box sx={{ height: 600, width: '100%' }}>
-        {brands && brands.length > 0 ? (
-          <DataGrid
-            rows={brands}
-            columns={columns}
-            getRowId={(row) => row._id || row.id || Math.random().toString()}
-            loading={loading}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: {
-                paginationModel: { page: 0, pageSize: 10 },
-              },
-            }}
-            onError={(error) => {
-              console.error('DataGrid error:', error);
-              setError('Error displaying data grid');
-            }}
-          />
-        ) : (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <Typography variant="h6" color="textSecondary">
-              {loading ? 'Loading brands...' : 'No brands found'}
-            </Typography>
-          </Box>
-        )}
-      </Box>
+      <DataGrid
+        rows={brands}
+        columns={columns}
+        pageSize={10}
+        rowsPerPageOptions={[10, 25, 50]}
+        disableSelectionOnClick
+        autoHeight
+        getRowId={(row) => row._id}
+      />
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+      {/* Add/Edit Dialog */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingBrand ? 'Edit Brand' : 'Add New Brand'}
+          {editingBrand ? 'Edit Brand' : 'Add Brand'}
         </DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Brand Name"
-            fullWidth
-            value={formData.name}
-            onChange={(e) => setFormData({ name: e.target.value })}
-          />
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Description"
+              multiline
+              rows={3}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingBrand ? 'Update' : 'Create'}
+          <Button onClick={() => setOpenDialog(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={submitting || !formData.name}
+          >
+            {submitting ? <CircularProgress size={20} /> : (editingBrand ? 'Update' : 'Create')}
           </Button>
         </DialogActions>
       </Dialog>

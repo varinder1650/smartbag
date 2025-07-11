@@ -19,6 +19,8 @@ import {
   Card,
   CardMedia,
   CardContent,
+  CircularProgress,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -26,9 +28,11 @@ import {
   Delete as DeleteIcon,
   CloudUpload as CloudUploadIcon,
   Delete as DeleteImageIcon,
+  Info as InfoIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import axios from 'axios';
+import { apiService, extractData, handleApiError } from '../services/api';
 
 const Products = () => {
   const [products, setProducts] = useState([]);
@@ -39,6 +43,7 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -55,80 +60,55 @@ const Products = () => {
     fetchData();
   }, []);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Products data:', products);
-    if (products && products.length > 0) {
-      console.log('First product:', products[0]);
-      console.log('First product price:', products[0].price);
-      console.log('First product category:', products[0].category);
-      console.log('First product brand:', products[0].brand);
-    }
-    console.log('Categories data:', categories);
-    console.log('Brands data:', brands);
-  }, [products, categories, brands]);
-
   const fetchData = async () => {
     try {
-      console.log('=== FETCHING DATA ===');
-      console.log('Current timestamp:', Date.now());
+      setLoading(true);
+      setError('');
       
-      const timestamp = Date.now();
+      console.log('=== FETCHING DATA ===');
+      
       const [productsRes, categoriesRes, brandsRes] = await Promise.all([
-        axios.get(`/products?_t=${timestamp}`),
-        axios.get(`/categories?_t=${timestamp}`),
-        axios.get(`/brands?_t=${timestamp}`),
+        apiService.getProducts(),
+        apiService.getCategories(),
+        apiService.getBrands(),
       ]);
 
       console.log('API Calls completed successfully');
-      console.log('Products Response Status:', productsRes.status);
-      console.log('Categories Response Status:', categoriesRes.status);
-      console.log('Brands Response Status:', brandsRes.status);
 
-      console.log('Products Response:', productsRes.data);
-      console.log('Categories Response:', categoriesRes.data);
-      console.log('Brands Response:', brandsRes.data);
+      // Extract data using helper function
+      const productsArray = extractData(productsRes);
+      const categoriesArray = extractData(categoriesRes);
+      const brandsArray = extractData(brandsRes);
 
-      // Extract data from nested structure
-      const productsArray = productsRes.data.products || productsRes.data;
-      const categoriesArray = categoriesRes.data.categories || categoriesRes.data;
-      const brandsArray = brandsRes.data.brands || brandsRes.data;
-
-      console.log('Extracted Products:', productsArray);
-      console.log('Extracted Categories:', categoriesArray);
-      console.log('Extracted Brands:', brandsArray);
+      console.log('Extracted data:', {
+        products: productsArray?.length || 0,
+        categories: categoriesArray?.length || 0,
+        brands: brandsArray?.length || 0
+      });
 
       // Ensure we always set arrays
       const safeProducts = Array.isArray(productsArray) ? productsArray : [];
       const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
       const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
 
-      console.log('Safe Products:', safeProducts);
-      console.log('Safe Categories:', safeCategories);
-      console.log('Safe Brands:', safeBrands);
-
       // Process products to add categoryName and brandName fields
       const processedProducts = safeProducts.map(product => ({
         ...product,
         categoryName: product.category?.name || 'Unknown Category',
-        brandName: product.brand?.name || 'Unknown Brand'
+        brandName: product.brand?.name || 'Unknown Brand',
+        // Ensure images is always an array
+        images: Array.isArray(product.images) ? product.images : []
       }));
-
-      console.log('Processed Products:', processedProducts);
-      console.log('=== SETTING STATE ===');
-      console.log('Setting products:', processedProducts.length);
-      console.log('Setting categories:', safeCategories.length);
-      console.log('Setting brands:', safeBrands.length);
 
       setProducts(processedProducts);
       setCategories(safeCategories);
       setBrands(safeBrands);
       
-      console.log('=== STATE SET COMPLETE ===');
+      console.log('=== DATA LOADED SUCCESSFULLY ===');
     } catch (error) {
       console.error('Error fetching data:', error);
-      console.error('Error details:', error.response?.data);
-      setError('Error fetching data');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
       setProducts([]);
       setCategories([]);
       setBrands([]);
@@ -149,32 +129,37 @@ const Products = () => {
     });
     setImageFiles([]);
     setExistingImages([]);
+    setError('');
+    setSuccess('');
     setOpenDialog(true);
   };
 
   const handleEdit = (product) => {
     setEditingProduct(product);
     setFormData({
-      name: product.name,
-      description: product.description,
-      price: product.price.toString(),
-      stock: product.stock.toString(),
-      category: product.category._id || product.category,
-      brand: product.brand._id || product.brand,
+      name: product.name || '',
+      description: product.description || '',
+      price: product.price?.toString() || '',
+      stock: product.stock?.toString() || '',
+      category: product.category?._id || product.category || '',
+      brand: product.brand?._id || product.brand || '',
     });
     setImageFiles([]);
     setExistingImages(Array.isArray(product.images) ? product.images : []);
+    setError('');
+    setSuccess('');
     setOpenDialog(true);
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
-        await axios.delete(`/products/${id}`);
+        await apiService.deleteProduct(id);
         setSuccess('Product deleted successfully');
         fetchData();
       } catch (error) {
-        setError('Error deleting product');
+        const errorResult = handleApiError(error);
+        setError(errorResult.message);
       }
     }
   };
@@ -189,6 +174,10 @@ const Products = () => {
 
   const handleSubmit = async () => {
     try {
+      setSubmitting(true);
+      setError('');
+      setSuccess('');
+
       const productData = new FormData();
       productData.append('name', formData.name);
       productData.append('description', formData.description);
@@ -198,142 +187,114 @@ const Products = () => {
       productData.append('brand', formData.brand);
       
       // Append new files
-      imageFiles.forEach(file => {
+      imageFiles.forEach((file) => {
         productData.append('images', file);
       });
-      
-      // Append existing images as URLs
-      existingImages.forEach(image => {
-        productData.append('images', image);
+
+      // Append existing images that weren't removed
+      existingImages.forEach((image) => {
+        productData.append('existingImages', image);
       });
 
       if (editingProduct) {
-        await axios.put(`/products/${editingProduct._id}`, productData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await apiService.updateProduct(editingProduct._id, productData);
         setSuccess('Product updated successfully');
       } else {
-        await axios.post('/products', productData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await apiService.createProduct(productData);
         setSuccess('Product created successfully');
       }
+
       setOpenDialog(false);
-      setImageFiles([]);
-      setExistingImages([]);
-      
-      // Force a complete refresh with cache busting
-      console.log('Forcing data refresh after product update...');
-      await fetchData();
-      
-      // Force a re-render by updating a state variable
-      setProducts(prev => [...prev]);
-      
+      fetchData();
     } catch (error) {
-      setError(error.response?.data?.message || 'Error saving product');
+      const errorResult = handleApiError(error);
+      setError(errorResult.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  const handleImageUpload = (event) => {
+    const files = Array.from(event.target.files);
+    setImageFiles(prev => [...prev, ...files]);
+  };
+
   const columns = [
-    { 
-      field: 'name', 
-      headerName: 'Name', 
-      width: 200,
-    },
-    { 
-      field: 'description', 
-      headerName: 'Description', 
-      width: 300,
-    },
-    { 
-      field: 'price', 
-      headerName: 'Price', 
-      width: 100,
+    { field: 'name', headerName: 'Name', width: 200 },
+    { field: 'description', headerName: 'Description', width: 300 },
+    { field: 'price', headerName: 'Price', width: 100, type: 'number' },
+    { field: 'stock', headerName: 'Stock', width: 100, type: 'number' },
+    { field: 'categoryName', headerName: 'Category', width: 150 },
+    { field: 'brandName', headerName: 'Brand', width: 150 },
+    {
+      field: 'images',
+      headerName: 'Images',
+      width: 140,
       renderCell: (params) => {
-        const value = params.row.price;
-        if (value === null || value === undefined) return 'N/A';
-        return `₹${value}`;
-      }
-    },
-    { 
-      field: 'stock', 
-      headerName: 'Stock', 
-      width: 100,
-      renderCell: (params) => {
-        const value = params.row.stock;
-        if (value === null || value === undefined) return 'N/A';
-        return value.toString();
-      }
-    },
-    { 
-      field: 'categoryName', 
-      headerName: 'Category', 
-      width: 150,
-    },
-    { 
-      field: 'brandName', 
-      headerName: 'Brand', 
-      width: 150,
-    },
-    { 
-      field: 'images', 
-      headerName: 'Images', 
-      width: 200,
-      renderCell: (params) => {
-        const images = params.row.images;
-        if (!images || images.length === 0) return 'No images';
+        const images = params.value || [];
+        const fallback =
+          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="100%" height="100%" fill="%23e0e0e0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="%23777">No Img</text></svg>';
+        const backendBase = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001';
         return (
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {images.slice(0, 3).map((image, index) => (
-              <img
-                key={`${params.row._id}-${index}-${Date.now()}`}
-                src={`http://10.0.0.74:3001${image}?_t=${Date.now()}`}
-                alt={`Product ${index + 1}`}
-                style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
-                onError={(e) => {
-                  console.error('Image failed to load:', image);
-                  e.target.style.display = 'none';
-                }}
-              />
-            ))}
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            {images.length > 0 ? (
+              images.slice(0, 3).map((image, index) => {
+                let imageUrl;
+                if (image.startsWith('http')) {
+                  imageUrl = image;
+                } else if (image.startsWith('/uploads/')) {
+                  imageUrl = `${backendBase}${image}?_t=${Date.now()}`;
+                } else {
+                  imageUrl = `${backendBase}/uploads/${image}?_t=${Date.now()}`;
+                }
+                console.log('Product image URL:', imageUrl);
+                return (
+                  <img
+                    key={index}
+                    src={imageUrl}
+                    alt={`Product ${index + 1}`}
+                    style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #ddd', background: '#fafafa' }}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = fallback;
+                    }}
+                  />
+                );
+              })
+            ) : (
+              <img src={fallback} alt="No Img" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #ddd', background: '#fafafa' }} />
+            )}
             {images.length > 3 && (
               <Chip label={`+${images.length - 3}`} size="small" />
             )}
           </Box>
         );
-      }
-    },
-    { 
-      field: 'createdAt', 
-      headerName: 'Created', 
-      width: 150,
-      renderCell: (params) => {
-        const value = params.row.createdAt;
-        if (!value) return 'N/A';
-        try {
-          return new Date(value).toLocaleDateString();
-        } catch (error) {
-          return 'Invalid Date';
-        }
-      }
+      },
     },
     {
       field: 'actions',
       headerName: 'Actions',
       width: 150,
-      sortable: false,
       renderCell: (params) => (
         <Box>
-          <IconButton onClick={() => handleEdit(params.row)} color="primary">
+          <IconButton onClick={() => handleEdit(params.row)} size="small">
             <EditIcon />
           </IconButton>
-          <IconButton onClick={() => handleDelete(params.row._id)} color="error">
+          <IconButton onClick={() => handleDelete(params.row._id)} size="small" color="error">
             <DeleteIcon />
           </IconButton>
         </Box>
       ),
     },
   ];
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ mt: 8 }}>
@@ -348,13 +309,6 @@ const Products = () => {
         </Button>
       </Box>
 
-      {/* Debug Info */}
-      <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-        <Typography variant="body2">
-          Debug Info: Loading={loading.toString()}, Products={products.length}, Categories={categories.length}, Brands={brands.length}
-        </Typography>
-      </Box>
-
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
@@ -367,71 +321,147 @@ const Products = () => {
         </Alert>
       )}
 
-      <Box sx={{ height: 600, width: '100%' }}>
-        {products && products.length > 0 ? (
-          <DataGrid
-            rows={products}
-            columns={columns}
-            getRowId={(row) => row._id || row.id || Math.random().toString()}
-            loading={loading}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: {
-                paginationModel: { page: 0, pageSize: 10 },
-              },
-            }}
-            onError={(error) => {
-              console.error('DataGrid error:', error);
-              setError('Error displaying data grid');
-            }}
-          />
-        ) : (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <Typography variant="h6" color="textSecondary">
-              {loading ? 'Loading products...' : 'No products found'}
-            </Typography>
-          </Box>
-        )}
-      </Box>
+      <DataGrid
+        rows={products}
+        columns={columns}
+        pageSize={10}
+        rowsPerPageOptions={[10, 25, 50]}
+        disableSelectionOnClick
+        autoHeight
+        getRowId={(row) => row._id}
+        rowHeight={60}
+        headerHeight={60}
+      />
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
+      {/* Add/Edit Dialog */}
+      <Dialog 
+        open={openDialog} 
+        onClose={() => setOpenDialog(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+            maxHeight: '95vh',
+            height: 'auto',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle 
+          sx={{ 
+            borderBottom: '1px solid #e0e0e0',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            fontWeight: 700,
+            fontSize: '1.4rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            py: 2.5
+          }}
+        >
+          {editingProduct ? <EditIcon sx={{ fontSize: 28 }} /> : <AddIcon sx={{ fontSize: 28 }} />}
           {editingProduct ? 'Edit Product' : 'Add New Product'}
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <TextField
-              label="Product Name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              fullWidth
-              multiline
-              rows={3}
-            />
-            <Box sx={{ display: 'flex', gap: 2 }}>
+        
+        <DialogContent sx={{ p: 4, maxHeight: '70vh', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
+          <Grid container spacing={3}>
+            {/* First row: Name & Price */}
+            <Grid item xs={12} md={6}>
               <TextField
+                fullWidth
+                label="Product Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { 
+                    borderRadius: 2,
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#667eea'
+                      }
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 500
+                  }
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
                 label="Price"
                 type="number"
                 value={formData.price}
                 onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                fullWidth
+                required
+                variant="outlined"
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { 
+                    borderRadius: 2,
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#667eea'
+                      }
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 500
+                  }
+                }}
               />
+            </Grid>
+            {/* Second row: Stock & Category */}
+            <Grid item xs={12} md={6}>
               <TextField
-                label="Stock"
+                fullWidth
+                label="Stock Quantity"
                 type="number"
                 value={formData.stock}
                 onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                fullWidth
+                required
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { 
+                    borderRadius: 2,
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#667eea'
+                      }
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 500
+                  }
+                }}
               />
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <FormControl fullWidth>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth required variant="outlined" sx={{ 
+                '& .MuiOutlinedInput-root': { 
+                  borderRadius: 2,
+                  backgroundColor: 'white',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea'
+                    }
+                  }
+                },
+                '& .MuiInputLabel-root': {
+                  fontWeight: 500
+                }
+              }}>
                 <InputLabel>Category</InputLabel>
                 <Select
                   value={formData.category}
@@ -445,7 +475,23 @@ const Products = () => {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl fullWidth>
+            </Grid>
+            {/* Third row: Brand & Description */}
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth required variant="outlined" sx={{ 
+                '& .MuiOutlinedInput-root': { 
+                  borderRadius: 2,
+                  backgroundColor: 'white',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea'
+                    }
+                  }
+                },
+                '& .MuiInputLabel-root': {
+                  fontWeight: 500
+                }
+              }}>
                 <InputLabel>Brand</InputLabel>
                 <Select
                   value={formData.brand}
@@ -459,108 +505,275 @@ const Products = () => {
                   ))}
                 </Select>
               </FormControl>
-            </Box>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Product Images
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <input
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  id="image-upload"
-                  multiple
-                  type="file"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files);
-                    setImageFiles(prev => [...prev, ...files]);
-                  }}
-                />
-                <label htmlFor="image-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<CloudUploadIcon />}
-                    sx={{ mb: 2 }}
-                  >
-                    Upload Images
-                  </Button>
-                </label>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Product Description"
+                multiline
+                rows={4}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                required
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': { 
+                    borderRadius: 2,
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#667eea'
+                      }
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 500
+                  }
+                }}
+              />
+            </Grid>
+            {/* Images Section: always full width */}
+            <Grid item xs={12}>
+              <Box sx={{ 
+                p: 3, 
+                backgroundColor: 'white', 
+                borderRadius: 2, 
+                border: '1px solid #e0e0e0',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+              }}>
+                <Typography variant="h6" sx={{ 
+                  mb: 3, 
+                  fontWeight: 700, 
+                  color: 'text.primary',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}>
+                  <ImageIcon color="primary" />
+                  Product Images
+                </Typography>
+                {/* Existing Images */}
+                {existingImages.length > 0 && (
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="subtitle1" sx={{ 
+                      mb: 2, 
+                      fontWeight: 600, 
+                      color: 'text.secondary',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}>
+                      <InfoIcon fontSize="small" />
+                      Current Images ({existingImages.length})
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {existingImages.map((image, index) => {
+                        let imageUrl;
+                        if (image.startsWith('/uploads/')) {
+                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001'}${image}?_t=${Date.now()}`;
+                        } else {
+                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001'}/uploads/${image}?_t=${Date.now()}`;
+                        }
+                        return (
+                          <Grid item key={index}>
+                            <Card 
+                              sx={{ 
+                                width: 120, 
+                                position: 'relative',
+                                borderRadius: 2,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                transition: 'transform 0.2s ease-in-out',
+                                '&:hover': {
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: '0 6px 20px rgba(0,0,0,0.15)'
+                                }
+                              }}
+                            >
+                              <CardMedia
+                                component="img"
+                                height="120"
+                                image={imageUrl}
+                                alt={`Image ${index + 1}`}
+                                sx={{ objectFit: 'cover' }}
+                                onError={(e) => {
+                                  console.error('Image failed to load in dialog:', imageUrl);
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                              <IconButton
+                                size="small"
+                                sx={{ 
+                                  position: 'absolute', 
+                                  top: 4, 
+                                  right: 4, 
+                                  bgcolor: 'rgba(255,255,255,0.95)',
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                  '&:hover': { 
+                                    bgcolor: 'rgba(255,255,255,1)',
+                                    transform: 'scale(1.1)'
+                                  },
+                                  transition: 'all 0.2s ease-in-out'
+                                }}
+                                onClick={() => handleRemoveExistingImage(index)}
+                              >
+                                <DeleteImageIcon fontSize="small" color="error" />
+                              </IconButton>
+                            </Card>
+                          </Grid>
+                        );
+                      })}
+                    </Grid>
+                  </Box>
+                )}
                 {/* New Images */}
                 {imageFiles.length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      New Images:
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="subtitle1" sx={{ 
+                      mb: 2, 
+                      fontWeight: 600, 
+                      color: 'text.secondary',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}>
+                      <CloudUploadIcon fontSize="small" />
+                      New Images ({imageFiles.length})
                     </Typography>
                     <Grid container spacing={2}>
                       {imageFiles.map((file, index) => (
-                        <Grid item xs={6} sm={4} key={index}>
-                          <Card>
+                        <Grid item key={index}>
+                          <Card 
+                            sx={{ 
+                              width: 120, 
+                              position: 'relative',
+                              borderRadius: 2,
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                              transition: 'transform 0.2s ease-in-out',
+                              '&:hover': {
+                                transform: 'translateY(-2px)',
+                                boxShadow: '0 6px 20px rgba(0,0,0,0.15)'
+                              }
+                            }}
+                          >
                             <CardMedia
                               component="img"
-                              height="140"
+                              height="120"
                               image={URL.createObjectURL(file)}
-                              alt={`New image ${index + 1}`}
+                              alt={`New Image ${index + 1}`}
+                              sx={{ objectFit: 'cover' }}
                             />
-                            <CardContent sx={{ p: 1 }}>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleRemoveImage(index)}
-                              >
-                                <DeleteImageIcon />
-                              </IconButton>
-                            </CardContent>
-                          </Card>
-                        </Grid>
-                      ))}
-                    </Grid>
-                  </Box>
-                )}
-
-                {/* Existing Images */}
-                {existingImages.length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Current Images:
-                    </Typography>
-                    <Grid container spacing={2}>
-                      {existingImages.map((image, index) => (
-                        <Grid item xs={6} sm={4} key={index}>
-                          <Card>
-                            <CardMedia
-                              component="img"
-                              height="140"
-                              image={`http://10.0.0.74:3001${image}?_t=${Date.now()}`}
-                              alt={`Current image ${index + 1}`}
-                              onError={(e) => {
-                                console.error('Existing image failed to load:', image);
-                                e.target.style.display = 'none';
+                            <IconButton
+                              size="small"
+                              sx={{ 
+                                position: 'absolute', 
+                                top: 4, 
+                                right: 4, 
+                                bgcolor: 'rgba(255,255,255,0.95)',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                '&:hover': { 
+                                  bgcolor: 'rgba(255,255,255,1)',
+                                  transform: 'scale(1.1)'
+                                },
+                                transition: 'all 0.2s ease-in-out'
                               }}
-                            />
-                            <CardContent sx={{ p: 1 }}>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleRemoveExistingImage(index)}
-                              >
-                                <DeleteImageIcon />
-                              </IconButton>
-                            </CardContent>
+                              onClick={() => handleRemoveImage(index)}
+                            >
+                              <DeleteImageIcon fontSize="small" color="error" />
+                            </IconButton>
                           </Card>
                         </Grid>
                       ))}
                     </Grid>
                   </Box>
                 )}
+                {/* Upload Button */}
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<CloudUploadIcon />}
+                  sx={{ 
+                    mt: 2,
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    py: 1.5,
+                    px: 3,
+                    borderColor: '#667eea',
+                    color: '#667eea',
+                    '&:hover': {
+                      borderColor: '#5a6fd8',
+                      backgroundColor: 'rgba(102, 126, 234, 0.04)',
+                      transform: 'translateY(-1px)',
+                      boxShadow: '0 4px 12px rgba(102, 126, 234, 0.2)'
+                    },
+                    transition: 'all 0.2s ease-in-out'
+                  }}
+                >
+                  Upload Images
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    style={{ display: 'none' }}
+                  />
+                </Button>
               </Box>
-            </Box>
-          </Box>
+            </Grid>
+          </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingProduct ? 'Update' : 'Create'}
+        
+        <DialogActions sx={{ 
+          p: 3, 
+          borderTop: '1px solid #e0e0e0', 
+          backgroundColor: '#f8f9fa',
+          gap: 2
+        }}>
+          <Button 
+            onClick={() => setOpenDialog(false)} 
+            disabled={submitting}
+            variant="outlined"
+            sx={{ 
+              borderRadius: 2, 
+              textTransform: 'none', 
+              fontWeight: 600,
+              px: 3,
+              py: 1.5,
+              borderColor: '#6c757d',
+              color: '#6c757d',
+              '&:hover': {
+                borderColor: '#5a6268',
+                backgroundColor: 'rgba(108, 117, 125, 0.04)'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={submitting || !formData.name || !formData.price || !formData.category || !formData.brand}
+            sx={{ 
+              borderRadius: 2, 
+              textTransform: 'none', 
+              fontWeight: 600,
+              px: 4,
+              py: 1.5,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 6px 20px rgba(102, 126, 234, 0.3)'
+              },
+              '&:disabled': {
+                background: '#e0e0e0',
+                color: '#9e9e9e'
+              },
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            {submitting ? <CircularProgress size={20} color="inherit" /> : (editingProduct ? 'Update Product' : 'Create Product')}
           </Button>
         </DialogActions>
       </Dialog>
