@@ -36,4 +36,32 @@ exports.deleteCategory = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+};
+
+exports.uploadIcon = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No icon file uploaded' });
+    }
+
+    const category = await Category.findById(req.params.id);
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+
+    // Generate the icon URL
+    const iconUrl = `/uploads/${req.file.filename}`;
+    
+    // Update the category with the new icon URL
+    category.icon = iconUrl;
+    await category.save();
+
+    res.json({ 
+      message: 'Icon uploaded successfully',
+      icon: iconUrl,
+      category: category
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 }; 

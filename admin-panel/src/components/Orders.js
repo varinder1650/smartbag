@@ -42,10 +42,18 @@ const Orders = () => {
       setError('');
       
       const response = await apiService.getOrders();
+      // console.log('Orders API response:', response);
       const ordersArray = extractData(response);
+      // console.log('Extracted orders data:', ordersArray);
       const safeOrders = Array.isArray(ordersArray) ? ordersArray : [];
-      
-      setOrders(safeOrders);
+      // Flatten user fields for DataGrid
+      const mappedOrders = safeOrders.map(order => ({
+        ...order,
+        customerName: order.user?.name || 'N/A',
+        customerEmail: order.user?.email || 'N/A',
+        customerPhone: order.user?.phone || 'N/A',
+      }));
+      setOrders(mappedOrders);
     } catch (error) {
       console.error('Error fetching orders:', error);
       const errorResult = handleApiError(error);
@@ -101,9 +109,9 @@ const Orders = () => {
 
   const columns = [
     { field: '_id', headerName: 'Order ID', width: 220 },
-    { field: 'user.name', headerName: 'Customer', width: 200, valueGetter: (params) => params.row.user?.name || 'N/A' },
-    { field: 'user.email', headerName: 'Email', width: 250, valueGetter: (params) => params.row.user?.email || 'N/A' },
-    { field: 'user.phone', headerName: 'Phone', width: 150, valueGetter: (params) => params.row.user?.phone || 'N/A' },
+    { field: 'customerName', headerName: 'Customer', width: 200 },
+    { field: 'customerEmail', headerName: 'Email', width: 250 },
+    { field: 'customerPhone', headerName: 'Phone', width: 150 },
     {
       field: 'items',
       headerName: 'Items',

@@ -90,7 +90,7 @@ export const apiService = {
     const timestamp = Date.now();
     return api.get(`/orders?_t=${timestamp}`, { params });
   },
-  updateOrderStatus: (id, status) => api.put(`/orders/${id}`, { status }),
+  updateOrderStatus: (id, status) => api.put(`/orders/${id}/status`, { status }),
 };
 
 // Helper function to extract data from nested API responses
@@ -100,7 +100,7 @@ export const extractData = (response) => {
   if (response.data.brands) return response.data.brands;
   if (response.data.orders) return response.data.orders;
   if (response.data.users) return response.data.users;
-  // For users, the API returns an array directly
+  // For orders and users, the API returns an array directly
   if (Array.isArray(response.data)) return response.data;
   return response.data;
 };

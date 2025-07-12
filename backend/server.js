@@ -104,30 +104,6 @@ app.use((req, res, next) => {
 
 app.use(morgan('dev'));
 
-// Specific route for serving images with proper headers
-app.get('/uploads/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(__dirname, 'uploads', filename);
-  
-  // Set proper headers for images
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-  res.setHeader('Cache-Control', 'public, max-age=31536000');
-  res.setHeader('Content-Type', getContentType(filename));
-  
-  // Use express.static-like behavior without conflicts
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('Error serving image:', filename, err.message);
-      // Don't try to send error response if headers already sent
-      if (!res.headersSent) {
-        res.status(404).send('Image not found');
-      }
-    }
-  });
-});
-
 // Helper function to determine content type
 function getContentType(filename) {
   const ext = path.extname(filename).toLowerCase();
@@ -169,6 +145,30 @@ app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/order'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/user', require('./routes/user'));
+
+// Specific route for serving images with proper headers (moved after API routes)
+app.get('/uploads/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, 'uploads', filename);
+  
+  // Set proper headers for images
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  res.setHeader('Content-Type', getContentType(filename));
+  
+  // Use express.static-like behavior without conflicts
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('Error serving image:', filename, err.message);
+      // Don't try to send error response if headers already sent
+      if (!res.headersSent) {
+        res.status(404).send('Image not found');
+      }
+    }
+  });
+});
 
 // Global error handling middleware
 app.use((err, req, res, next) => {

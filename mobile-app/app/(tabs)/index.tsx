@@ -35,6 +35,7 @@ interface Product {
 interface Category {
   _id: string;
   name: string;
+  icon?: string;
 }
 
 interface SectionData {
@@ -44,18 +45,6 @@ interface SectionData {
 }
 
 const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
-
-const CATEGORY_EMOJIS: { [key: string]: string } = {
-  Grocery: '🛒',
-  Pizza: '🍕',
-  Halal: '🥘',
-  'Fast Food': '🍔',
-  Alcohol: '🍷',
-  Convenience: '🏪',
-  Health: '💊',
-  Gourmet: '🍽️',
-  // Add more as needed
-};
 
 const HomeScreen = () => {
   // Initialize with safe defaults
@@ -201,18 +190,10 @@ const HomeScreen = () => {
       const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
       
       setProducts(safeProducts);
-      setFilteredProducts(safeProducts);
       setCategories(safeCategories);
-      
-      console.log('fetchData - setProducts:', safeProducts);
-      console.log('fetchData - setFilteredProducts:', safeProducts);
-      console.log('fetchData - setCategories:', safeCategories);
     } catch (error) {
       console.error('Error fetching data:', error);
-      // Set empty arrays on error
-      setProducts([]);
-      setFilteredProducts([]);
-      setCategories([]);
+      Alert.alert('Error', 'Failed to load data. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -227,7 +208,6 @@ const HomeScreen = () => {
   };
 
   const retryConnection = () => {
-    setLoading(true);
     fetchData();
   };
 
@@ -240,7 +220,7 @@ const HomeScreen = () => {
   };
 
   const handleViewAllPress = (categoryId: string) => {
-    router.push(`/category/${categoryId}`);
+    setSelectedCategory(categoryId);
   };
 
   const handleCartPress = () => {
@@ -248,17 +228,16 @@ const HomeScreen = () => {
   };
 
   const handleHomeButtonPress = () => {
-    console.log('Home button pressed!');
-    Alert.alert('Test', 'Home button is working!', [
-      { text: 'OK', onPress: () => router.push('../address') }
-    ]);
+    setSelectedCategory(null);
+    setSearchQuery('');
   };
 
   const addToCart = async (productId: string) => {
     if (!token) {
-      Alert.alert('Login Required', 'Please login to add items to cart');
+      Alert.alert('Error', 'Please login to add items to cart');
       return;
     }
+
     try {
       const response = await fetch(`${API_BASE_URL}/cart/add`, {
         method: 'POST',
@@ -266,13 +245,18 @@ const HomeScreen = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ productId, quantity: 1 }),
+        body: JSON.stringify({
+          productId: productId,
+          quantity: 1,
+        }),
       });
+
       const data = await response.json();
+
       if (response.ok) {
         setShowCartNotification(true);
         setTimeout(() => setShowCartNotification(false), 2000);
-        await fetchCartCount();
+        fetchCartCount();
       } else {
         Alert.alert('Error', data.message || 'Failed to add to cart');
       }
@@ -281,28 +265,32 @@ const HomeScreen = () => {
     }
   };
 
-  // --- UI Components ---
+  const getCategoryIconUrl = (category: Category) => {
+    if (category.icon) {
+      if (category.icon.startsWith('http')) {
+        return category.icon;
+      }
+      return `${IMAGE_BASE_URL}${category.icon}?_t=${Date.now()}`;
+    }
+    return null;
+  };
+
   const renderTopBar = () => (
-    <View style={{ paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#fff' }}>
-      {/* Search Bar */}
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f2f2f2',
-        borderRadius: 32,
-        paddingHorizontal: 16,
-        height: 44,
-        marginBottom: 8,
-      }}>
-        <Ionicons name="search-outline" size={22} color="#666" style={{ marginRight: 8 }} />
-        <TextInput
-          style={{ flex: 1, fontSize: 16, color: '#222', paddingVertical: 0, backgroundColor: 'transparent' }}
-          placeholder="Search"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#888"
-          returnKeyType="search"
-        />
+    <View style={styles.topBar}>
+      <View style={styles.locationContainer}>
+        <Ionicons name="location-outline" size={20} color="#333" />
+        <Text style={styles.locationText} numberOfLines={1}>{userAddress}</Text>
+        <Ionicons name="chevron-down" size={16} color="#333" />
+      </View>
+      <View style={styles.topBarActions}>
+        <TouchableOpacity style={styles.cartButton} onPress={handleCartPress}>
+          <Ionicons name="bag-outline" size={24} color="#333" />
+          {cartCount > 0 && (
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{cartCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -313,15 +301,38 @@ const HomeScreen = () => {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }}>
         {/* All filter */}
         <TouchableOpacity onPress={() => handleCategoryPress(null)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
-          <Text style={{ fontSize: 24, marginBottom: 2 }}>🔎</Text>
+          <View style={styles.categoryIconContainer}>
+            <Ionicons name="search" size={24} color={selectedCategory === null ? '#007AFF' : '#888'} />
+          </View>
           <Text style={{ fontSize: 14, color: selectedCategory === null ? '#111' : '#888', fontWeight: selectedCategory === null ? 'bold' : 'normal' }}>All</Text>
         </TouchableOpacity>
-        {categories.map((cat) => (
-          <TouchableOpacity key={cat._id} onPress={() => handleCategoryPress(cat._id)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
-            <Text style={{ fontSize: 24, marginBottom: 2 }}>{CATEGORY_EMOJIS[cat.name] || '🍽️'}</Text>
-            <Text style={{ fontSize: 14, color: selectedCategory === cat._id ? '#111' : '#888', fontWeight: selectedCategory === cat._id ? 'bold' : 'normal' }}>{cat.name}</Text>
-          </TouchableOpacity>
-        ))}
+        {categories.map((cat) => {
+          const iconUrl = getCategoryIconUrl(cat);
+          return (
+            <TouchableOpacity key={cat._id} onPress={() => handleCategoryPress(cat._id)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
+              <View style={styles.categoryIconContainer}>
+                {iconUrl ? (
+                  <Image
+                    source={{ uri: iconUrl }}
+                    style={styles.categoryIcon}
+                    resizeMode="contain"
+                    onError={() => {
+                      console.log('Category icon failed to load for:', cat.name);
+                    }}
+                    defaultSource={{ uri: 'https://via.placeholder.com/48x48' }}
+                  />
+                ) : (
+                  <Ionicons 
+                    name="restaurant-outline" 
+                    size={24} 
+                    color={selectedCategory === cat._id ? '#007AFF' : '#888'} 
+                  />
+                )}
+              </View>
+              <Text style={{ fontSize: 14, color: selectedCategory === cat._id ? '#111' : '#888', fontWeight: selectedCategory === cat._id ? 'bold' : 'normal' }}>{cat.name}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -483,6 +494,51 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
+  topBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cartButton: {
+    position: 'relative',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cartBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -504,49 +560,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  topBar: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  locationBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
-  },
-  topIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconBtn: {
-    marginLeft: 16,
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#FF3B30',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  searchBar: {
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
@@ -626,7 +640,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  categoryIconDynamic: {
+  categoryIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -634,6 +648,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  categoryIcon: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
   categoryUberSelected: {
     backgroundColor: '#007AFF',
