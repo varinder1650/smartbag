@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -486,13 +486,14 @@ const HomeScreen = () => {
     return renderCategorySection(item);
   };
 
-  const renderHeader = () => (
+  // Memoize renderHeader to prevent remounting
+  const renderHeader = useCallback(() => (
     <>
       {renderTopBar()}
       {renderSearchBar()}
       {renderCategoryFilterRow()}
     </>
-  );
+  ), [userAddress, cartCount, searchQuery, selectedCategory, categories]);
 
   const renderFooter = () => (
     <View style={{ height: 100 }} />
@@ -514,23 +515,36 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList
-        data={getMainListData()}
-        renderItem={renderMainListItem}
-        keyExtractor={(item) => item._id}
-        ListHeaderComponent={renderHeader}
-        ListFooterComponent={renderFooter}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#007AFF']}
-            tintColor="#007AFF"
-          />
-        }
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
-      />
+      {renderTopBar()}
+      {renderSearchBar()}
+      {searchQuery.trim() ? (
+        <FlatList
+          data={filteredProducts}
+          renderItem={renderProductTile}
+          keyExtractor={(item) => item._id}
+          ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32, color: '#888' }}>No products found.</Text>}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}
+        />
+      ) : (
+        <FlatList
+          data={getMainListData()}
+          renderItem={renderMainListItem}
+          keyExtractor={(item) => item._id}
+          ListHeaderComponent={renderCategoryFilterRow}
+          ListFooterComponent={renderFooter}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#007AFF']}
+              tintColor="#007AFF"
+            />
+          }
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
+        />
+      )}
       {showCartNotification && (
         <View style={styles.cartNotification}>
           <Ionicons name="checkmark-circle" size={20} color="#fff" />
