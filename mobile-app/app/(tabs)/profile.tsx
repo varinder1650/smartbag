@@ -66,24 +66,7 @@ export default function ProfileScreen() {
             <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Personal Information</Text>
-            
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Full Name</Text>
-              <Text style={styles.infoValue}>{user?.name || 'Not provided'}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{user?.email || 'Not provided'}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Phone Number</Text>
-              <Text style={styles.infoValue}>{user?.phone || 'Not provided'}</Text>
-            </View>
-          </View>
+          {/* Removed Personal Information Section */}
 
           <TouchableOpacity
             style={styles.profileManagementButton}
@@ -100,6 +83,19 @@ export default function ProfileScreen() {
           >
             <Ionicons name="receipt-outline" size={20} color="#007AFF" />
             <Text style={styles.ordersButtonText}>My Orders</Text>
+            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
+          </TouchableOpacity>
+
+          {/* Contact Us Button */}
+          <TouchableOpacity
+            style={styles.contactUsButton}
+            onPress={() => {
+              // You can update this to open a contact form, email, or support page
+              Alert.alert('Contact Us', 'Email us at support@example.com');
+            }}
+          >
+            <Ionicons name="mail-outline" size={20} color="#007AFF" />
+            <Text style={styles.contactUsButtonText}>Contact Us</Text>
             <Ionicons name="chevron-forward" size={20} color="#007AFF" />
           </TouchableOpacity>
 
@@ -263,5 +259,21 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 32,
+  },
+  contactUsButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+    padding: 16,
+    borderRadius: 8,
+    margin: 16,
+    marginBottom: 20,
+  },
+  contactUsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginLeft: 10,
   },
 }); 

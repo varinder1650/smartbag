@@ -33,6 +33,7 @@ const Categories = () => {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploadingIcon, setUploadingIcon] = useState(false);
+  const [iconFile, setIconFile] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -98,49 +99,9 @@ const Categories = () => {
     }
   };
 
-  const handleIconUpload = async (event) => {
+  const handleIconSelect = (event) => {
     const file = event.target.files[0];
-    if (!file) return;
-
-    if (!editingCategory) {
-      setError('Please save the category first before uploading an icon');
-      return;
-    }
-
-    try {
-      setUploadingIcon(true);
-      setError('');
-
-      const formData = new FormData();
-      formData.append('icon', file);
-
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/categories/${editingCategory._id}/icon`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload icon');
-      }
-
-      const result = await response.json();
-      setSuccess('Icon uploaded successfully');
-      
-      // Update the category in the list
-      setCategories(prev => prev.map(cat => 
-        cat._id === editingCategory._id 
-          ? { ...cat, icon: result.icon }
-          : cat
-      ));
-      
-      // Update the editing category
-      setEditingCategory({ ...editingCategory, icon: result.icon });
-    } catch (error) {
-      console.error('Error uploading icon:', error);
-      setError('Failed to upload icon');
-    } finally {
-      setUploadingIcon(false);
-    }
+    if (file) setIconFile(file);
   };
 
   const handleSubmit = async () => {
@@ -149,19 +110,32 @@ const Categories = () => {
       setError('');
       setSuccess('');
 
+      // Use FormData if iconFile is present or for new category
+      if (!editingCategory || iconFile) {
+        const formDataObj = new FormData();
+        formDataObj.append('name', formData.name);
+        formDataObj.append('description', formData.description);
+        if (iconFile) formDataObj.append('icon', iconFile);
+        let response;
+        if (editingCategory) {
+          response = await apiService.updateCategory(editingCategory._id, formDataObj);
+        } else {
+          response = await apiService.createCategory(formDataObj);
+        }
+        setSuccess(editingCategory ? 'Category updated successfully' : 'Category created successfully');
+        setOpenDialog(false);
+        fetchData();
+        setIconFile(null);
+        return;
+      }
+      // Fallback for editing without icon change
       if (editingCategory) {
         await apiService.updateCategory(editingCategory._id, formData);
         setSuccess('Category updated successfully');
-      } else {
-        const newCategory = await apiService.createCategory(formData);
-        setSuccess('Category created successfully');
-        // Set the new category as editing category for icon upload
-        setEditingCategory(newCategory);
-        return; // Don't close dialog yet, allow icon upload
       }
-
       setOpenDialog(false);
       fetchData();
+      setIconFile(null);
     } catch (error) {
       const errorResult = handleApiError(error);
       setError(errorResult.message);
@@ -227,7 +201,7 @@ const Categories = () => {
   }
 
   return (
-    <Box>
+    <Box sx={{ pt: 10 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Categories</Typography>
         <Button
@@ -262,95 +236,217 @@ const Categories = () => {
       />
 
       {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingCategory ? 'Edit Category' : 'Add Category'}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+            maxHeight: '90vh',
+            height: 'auto',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            borderBottom: '1px solid #e0e0e0',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            fontWeight: 700,
+            fontSize: '1.4rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            py: 2.5
+          }}
+        >
+          {editingCategory ? <EditIcon sx={{ fontSize: 28 }} /> : <AddIcon sx={{ fontSize: 28 }} />}
+          {editingCategory ? 'Edit Category' : 'Add New Category'}
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Description"
-                  multiline
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </Grid>
-              
-              {/* Icon Upload Section */}
-              {editingCategory && (
-                <Grid item xs={12}>
-                  <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Category Icon
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                      {editingCategory.icon ? (
-                        <Avatar
-                          src={getIconUrl(editingCategory.icon)}
-                          sx={{ width: 48, height: 48 }}
-                          variant="rounded"
-                        />
-                      ) : (
-                        <Avatar sx={{ width: 48, height: 48, bgcolor: 'grey.300' }}>
-                          <ImageIcon />
-                        </Avatar>
-                      )}
-                      
-                      <Box>
-                        <input
-                          accept="image/*"
-                          style={{ display: 'none' }}
-                          id="icon-upload"
-                          type="file"
-                          onChange={handleIconUpload}
-                        />
-                        <label htmlFor="icon-upload">
-                          <Button
-                            component="span"
-                            variant="outlined"
-                            startIcon={uploadingIcon ? <CircularProgress size={16} /> : <UploadIcon />}
-                            disabled={uploadingIcon}
-                            size="small"
-                          >
-                            {uploadingIcon ? 'Uploading...' : 'Upload Icon'}
-                          </Button>
-                        </label>
-                      </Box>
-                    </Box>
-                    
-                    <Typography variant="caption" color="text.secondary">
-                      Upload a square image (PNG, JPG) for the category icon. Recommended size: 64x64px.
-                    </Typography>
-                  </Box>
-                </Grid>
-              )}
+        <DialogContent sx={{ p: 4, maxHeight: 'calc(90vh - 140px)', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
+          <Grid container spacing={3} direction="column" sx={{ mt: 2 }}>
+            {/* Category Name */}
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Category Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                variant="outlined"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#667eea'
+                      }
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 500
+                  }
+                }}
+              />
             </Grid>
-          </Box>
+            {/* Description */}
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                multiline
+                rows={3}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                variant="outlined"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#667eea'
+                      }
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontWeight: 500
+                  }
+                }}
+              />
+            </Grid>
+            {/* Icon Upload Section */}
+            <Grid item xs={12}>
+              <Box sx={{
+                p: 3,
+                backgroundColor: 'white',
+                borderRadius: 2,
+                border: '1px solid #e0e0e0',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+              }}>
+                <Typography variant="h6" sx={{
+                  mb: 3,
+                  fontWeight: 700,
+                  color: 'text.primary',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}>
+                  <ImageIcon color="primary" />
+                  Category Icon
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  {iconFile ? (
+                    <Avatar
+                      src={URL.createObjectURL(iconFile)}
+                      sx={{ width: 64, height: 64 }}
+                      variant="rounded"
+                    />
+                  ) : editingCategory && editingCategory.icon ? (
+                    <Avatar
+                      src={getIconUrl(editingCategory.icon)}
+                      sx={{ width: 64, height: 64 }}
+                      variant="rounded"
+                    />
+                  ) : (
+                    <Avatar sx={{ width: 64, height: 64, bgcolor: 'grey.300' }} variant="rounded">
+                      <ImageIcon />
+                    </Avatar>
+                  )}
+                  <Box>
+                    <input
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      id="icon-upload"
+                      type="file"
+                      onChange={handleIconSelect}
+                    />
+                    <label htmlFor="icon-upload">
+                      <Button
+                        component="span"
+                        variant="outlined"
+                        startIcon={<UploadIcon />}
+                        size="medium"
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          px: 3,
+                          py: 1.5,
+                          borderColor: '#667eea',
+                          color: '#667eea',
+                          '&:hover': {
+                            borderColor: '#5a6fd8',
+                            backgroundColor: 'rgba(102, 126, 234, 0.04)',
+                            transform: 'translateY(-1px)',
+                            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.2)'
+                          },
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                      >
+                        Upload Icon
+                      </Button>
+                    </label>
+                  </Box>
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  Upload a square image (PNG, JPG) for the category icon. Recommended size: 64x64px.
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)} disabled={submitting}>
+        <DialogActions sx={{
+          p: 3,
+          borderTop: '1px solid #e0e0e0',
+          backgroundColor: '#f8f9fa',
+          gap: 2
+        }}>
+          <Button
+            onClick={() => setOpenDialog(false)}
+            disabled={submitting}
+            variant="outlined"
+            sx={{
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 3,
+              py: 1.5,
+              borderColor: '#6c757d',
+              color: '#6c757d',
+              '&:hover': {
+                borderColor: '#5a6268',
+                backgroundColor: 'rgba(108, 117, 125, 0.04)'
+              }
+            }}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
             variant="contained"
             disabled={submitting || !formData.name}
+            sx={{
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 4,
+              py: 1.5,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 6px 20px rgba(102, 126, 234, 0.3)'
+              },
+              '&:disabled': {
+                background: '#e0e0e0',
+                color: '#9e9e9e'
+              },
+              transition: 'all 0.2s ease-in-out'
+            }}
           >
-            {submitting ? <CircularProgress size={20} /> : (editingCategory ? 'Update' : 'Create')}
+            {submitting ? <CircularProgress size={20} color="inherit" /> : (editingCategory ? 'Update Category' : 'Create Category')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -343,7 +343,7 @@ const Products = () => {
           sx: {
             borderRadius: 3,
             boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
-            maxHeight: '95vh',
+            maxHeight: '90vh',
             height: 'auto',
             overflow: 'hidden'
           }
@@ -366,10 +366,10 @@ const Products = () => {
           {editingProduct ? 'Edit Product' : 'Add New Product'}
         </DialogTitle>
         
-        <DialogContent sx={{ p: 4, maxHeight: '70vh', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
-          <Grid container spacing={3}>
-            {/* First row: Name & Price */}
-            <Grid item xs={12} md={6}>
+        <DialogContent sx={{ p: 4, maxHeight: 'calc(90vh - 140px)', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
+          <Grid container spacing={3} direction="column" sx={{ mt: 2 }}>
+            {/* Product Name */}
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Product Name"
@@ -393,7 +393,8 @@ const Products = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            {/* Price */}
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Price"
@@ -421,8 +422,8 @@ const Products = () => {
                 }}
               />
             </Grid>
-            {/* Second row: Stock & Category */}
-            <Grid item xs={12} md={6}>
+            {/* Stock Quantity */}
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Stock Quantity"
@@ -447,7 +448,8 @@ const Products = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            {/* Category */}
+            <Grid item xs={12}>
               <FormControl fullWidth required variant="outlined" sx={{ 
                 '& .MuiOutlinedInput-root': { 
                   borderRadius: 2,
@@ -476,8 +478,8 @@ const Products = () => {
                 </Select>
               </FormControl>
             </Grid>
-            {/* Third row: Brand & Description */}
-            <Grid item xs={12} md={6}>
+            {/* Brand */}
+            <Grid item xs={12}>
               <FormControl fullWidth required variant="outlined" sx={{ 
                 '& .MuiOutlinedInput-root': { 
                   borderRadius: 2,
@@ -506,7 +508,8 @@ const Products = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={6}>
+            {/* Product Description */}
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Product Description"

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001/api',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001/api',
   timeout: 10000,
 });
 
@@ -91,6 +91,10 @@ export const apiService = {
     return api.get(`/orders?_t=${timestamp}`, { params });
   },
   updateOrderStatus: (id, status) => api.put(`/orders/${id}/status`, { status }),
+
+  // Settings
+  getSettings: () => api.get('/settings'),
+  updateSettings: (data) => api.put('/settings', data),
 };
 
 // Helper function to extract data from nested API responses

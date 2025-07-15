@@ -18,7 +18,7 @@ import {
   Business as BrandsIcon,
   ShoppingCart as OrdersIcon,
   People as UsersIcon,
-  Store as StoreIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
@@ -30,6 +30,7 @@ const menuItems = [
   { text: 'Brands', icon: <BrandsIcon />, path: '/brands' },
   { text: 'Orders', icon: <OrdersIcon />, path: '/orders' },
   { text: 'Users', icon: <UsersIcon />, path: '/users' },
+  { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
 
 const Sidebar = ({ open, onToggle }) => {
@@ -55,11 +56,26 @@ const Sidebar = ({ open, onToggle }) => {
       }}
     >
       <Box sx={{ overflow: 'auto' }}>
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <StoreIcon color="primary" />
-          <Typography variant="h6" color="primary">
-            QuickComm
-          </Typography>
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img 
+            src="/logo.png" 
+            alt="Company Logo" 
+            style={{ 
+              height: '80px', 
+              width: 'auto',
+              maxWidth: '360px'
+            }}
+            onError={(e) => {
+              // Fallback to text if image fails to load
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }}
+          />
+          <Box sx={{ display: 'none', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h6" color="primary">
+              Your Company Name
+            </Typography>
+          </Box>
         </Box>
         <Divider />
         <List>

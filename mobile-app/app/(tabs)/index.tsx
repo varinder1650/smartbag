@@ -47,21 +47,8 @@ interface SectionData {
 const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
 
 const HomeScreen = () => {
-  // Initialize with safe defaults
-  const [authState, setAuthState] = React.useState({ user: null, token: null });
-  
-  // Try to get auth, but don't crash if it fails
-  React.useEffect(() => {
-    try {
-      const auth = useAuth();
-      setAuthState(auth);
-    } catch (error) {
-      console.warn('useAuth failed, using default state:', error);
-      setAuthState({ user: null, token: null });
-    }
-  }, []);
-  
-  const { user, token } = authState;
+  // Use AuthContext directly
+  const { user, token, loading: authLoading } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -91,7 +78,10 @@ const HomeScreen = () => {
   }, [searchQuery, products, selectedCategory]);
 
   const fetchCartCount = async () => {
-    if (!token) return;
+    if (!token) {
+      setCartCount(0);
+      return;
+    }
     
     try {
       const response = await fetch(`${API_BASE_URL}/cart`, {
@@ -103,14 +93,20 @@ const HomeScreen = () => {
       if (response.ok) {
         const cartData = await response.json();
         setCartCount(cartData.items?.length || 0);
+      } else {
+        setCartCount(0);
       }
     } catch (error) {
       console.error('Error fetching cart count:', error);
+      setCartCount(0);
     }
   };
 
   const fetchUserAddress = async () => {
-    if (!token) return;
+    if (!token) {
+      setUserAddress('Add Address');
+      return;
+    }
     
     try {
       const response = await fetch(`${API_BASE_URL}/user/address`, {
@@ -122,9 +118,12 @@ const HomeScreen = () => {
       if (response.ok) {
         const addressData = await response.json();
         setUserAddress(addressData.address || 'Add Address');
+      } else {
+        setUserAddress('Add Address');
       }
     } catch (error) {
       console.error('Error fetching user address:', error);
+      setUserAddress('Add Address');
     }
   };
 
@@ -224,6 +223,21 @@ const HomeScreen = () => {
   };
 
   const handleCartPress = () => {
+    if (authLoading) {
+      Alert.alert('Please wait', 'Checking login status...');
+      return;
+    }
+    if (!token) {
+      Alert.alert(
+        'Login Required',
+        'Please login to view your cart',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => router.push('/auth/login') }
+        ]
+      );
+      return;
+    }
     router.push('/(tabs)/explore');
   };
 
@@ -234,7 +248,14 @@ const HomeScreen = () => {
 
   const addToCart = async (productId: string) => {
     if (!token) {
-      Alert.alert('Error', 'Please login to add items to cart');
+      Alert.alert(
+        'Login Required', 
+        'Please login to add items to your cart', 
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => router.push('/auth/login') }
+        ]
+      );
       return;
     }
 
@@ -277,11 +298,11 @@ const HomeScreen = () => {
 
   const renderTopBar = () => (
     <View style={styles.topBar}>
-      <View style={styles.locationContainer}>
+      <TouchableOpacity style={styles.locationContainer} onPress={() => router.push('/address')}>
         <Ionicons name="location-outline" size={20} color="#333" />
         <Text style={styles.locationText} numberOfLines={1}>{userAddress}</Text>
         <Ionicons name="chevron-down" size={16} color="#333" />
-      </View>
+      </TouchableOpacity>
       <View style={styles.topBarActions}>
         <TouchableOpacity style={styles.cartButton} onPress={handleCartPress}>
           <Ionicons name="bag-outline" size={24} color="#333" />
@@ -295,9 +316,26 @@ const HomeScreen = () => {
     </View>
   );
 
+  const renderSearchBar = () => (
+    <View style={styles.searchBarContainer}>
+      <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search for products..."
+        placeholderTextColor="#888"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        returnKeyType="search"
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
+    </View>
+  );
+
   // --- Category Filter Row ---
   const renderCategoryFilterRow = () => (
-    <View style={{ backgroundColor: '#fff', paddingVertical: 4 }}>
+    <View style={styles.categoryFilterRow}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }}>
         {/* All filter */}
         <TouchableOpacity onPress={() => handleCategoryPress(null)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
@@ -429,10 +467,36 @@ const HomeScreen = () => {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryProductList}
+          nestedScrollEnabled={true}
         />
       </View>
     );
   };
+
+  // Create data for the main FlatList
+  const getMainListData = () => {
+    if (selectedCategory) {
+      const selectedCat = categories.find(cat => cat._id === selectedCategory);
+      return selectedCat ? [selectedCat] : [];
+    }
+    return categories;
+  };
+
+  const renderMainListItem = ({ item }: { item: Category }) => {
+    return renderCategorySection(item);
+  };
+
+  const renderHeader = () => (
+    <>
+      {renderTopBar()}
+      {renderSearchBar()}
+      {renderCategoryFilterRow()}
+    </>
+  );
+
+  const renderFooter = () => (
+    <View style={{ height: 100 }} />
+  );
 
   // --- Main Render ---
   if (loading) {
@@ -450,8 +514,12 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
-        contentContainerStyle={{ paddingBottom: 100 }} 
+      <FlatList
+        data={getMainListData()}
+        renderItem={renderMainListItem}
+        keyExtractor={(item) => item._id}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -461,24 +529,8 @@ const HomeScreen = () => {
             tintColor="#007AFF"
           />
         }
-      >
-        {renderTopBar()}
-        {renderCategoryFilterRow()}
-        
-        {/* Category Sections */}
-        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-          {selectedCategory ? (
-            // Show only the selected category
-            (() => {
-              const selectedCat = categories.find(cat => cat._id === selectedCategory);
-              return selectedCat ? renderCategorySection(selectedCat) : null;
-            })()
-          ) : (
-            // Show all categories when no filter is selected
-            categories.map(category => renderCategorySection(category))
-          )}
-        </View>
-      </ScrollView>
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
+      />
       {showCartNotification && (
         <View style={styles.cartNotification}>
           <Ionicons name="checkmark-circle" size={20} color="#fff" />
@@ -492,17 +544,21 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fff', // Set whole app background to white
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderRadius: 0,
+    marginHorizontal: 0,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    height: 48,
+    shadowColor: 'transparent',
+    borderWidth: 0,
   },
   locationContainer: {
     flexDirection: 'row',
@@ -510,10 +566,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
-    fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 6,
+    marginRight: 4,
     flex: 1,
   },
   topBarActions: {
@@ -521,18 +577,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cartButton: {
-    position: 'relative',
+    marginLeft: 8,
   },
   cartBadge: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#FF3B30',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
+    top: -6,
+    right: -10,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   cartBadgeText: {
     color: '#fff',
@@ -758,6 +815,52 @@ const styles = StyleSheet.create({
   },
   categoryProductList: {
     paddingHorizontal: 8,
+  },
+  loginButton: {
+    marginRight: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    height: 48,
+    shadowColor: 'transparent',
+    borderWidth: 0,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#222',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingVertical: 0,
+  },
+  categoryFilterRow: {
+    backgroundColor: '#fff',
+    borderRadius: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 12,
+    paddingVertical: 4,
+    shadowColor: 'transparent',
+    borderWidth: 0,
   },
 });
 

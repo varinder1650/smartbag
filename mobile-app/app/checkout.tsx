@@ -4,14 +4,14 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
+  ScrollView,
   ActivityIndicator,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE_URL = 'http://10.0.0.74:3001/api';
@@ -39,29 +39,63 @@ interface User {
   pincode?: string;
 }
 
+interface AddressData {
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  fullAddress: string;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
 export default function CheckoutScreen() {
   const { token, user } = useAuth();
+  const params = useLocalSearchParams();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [userData, setUserData] = useState<User | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('cod');
-  const [deliveryAddress, setDeliveryAddress] = useState({
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-  });
+  const [deliveryAddress, setDeliveryAddress] = useState<AddressData | null>(null);
 
-  // Delivery charges and fees
-  const DELIVERY_CHARGE = 40;
-  const APP_FEE = 10;
-  const TAX_RATE = 0.05; // 5% GST
+  // Add state for settings
+  const [settings, setSettings] = useState<{ appFee: number; deliveryCharge: number; gstRate: number } | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+
+  // Remove hardcoded fees
+  // const DELIVERY_CHARGE = 40;
+  // const APP_FEE = 10;
+  // const TAX_RATE = 0.05; // 5% GST
 
   useEffect(() => {
     fetchCartItems();
     fetchUserData();
+    fetchSettings();
   }, []);
+
+  // Handle address parameters from navigation - only run once when component mounts
+  useEffect(() => {
+    const addressFromParams = params.address as string;
+    const fullAddressFromParams = params.fullAddress as string;
+    
+    if (addressFromParams && fullAddressFromParams && !deliveryAddress) {
+      const addressData: AddressData = {
+        address: addressFromParams,
+        city: params.city as string || '',
+        state: params.state as string || '',
+        pincode: params.pincode as string || '',
+        fullAddress: fullAddressFromParams,
+        coordinates: params.latitude && params.longitude ? {
+          latitude: parseFloat(params.latitude as string),
+          longitude: parseFloat(params.longitude as string)
+        } : undefined
+      };
+      setDeliveryAddress(addressData);
+    }
+  }, []); // Empty dependency array - only run once
 
   const fetchCartItems = async () => {
     if (!token) return;
@@ -89,12 +123,34 @@ export default function CheckoutScreen() {
     // Use user data from auth context instead of fetching
     if (user) {
       setUserData(user);
-      setDeliveryAddress({
-        address: user.address || '',
-        city: user.city || '',
-        state: user.state || '',
-        pincode: user.pincode || '',
-      });
+      // Initialize delivery address from user data if available
+      if (user.address) {
+        setDeliveryAddress({
+          address: user.address,
+          city: user.city || '',
+          state: user.state || '',
+          pincode: user.pincode || '',
+          fullAddress: `${user.address}, ${user.city || ''}, ${user.state || ''} ${user.pincode || ''}`.trim(),
+        });
+      }
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/public`);
+      if (response.ok) {
+        const data = await response.json();
+        setSettings({
+          appFee: data.appFee || 0,
+          deliveryCharge: data.deliveryCharge || 0,
+          gstRate: data.gstRate || 0,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    } finally {
+      setSettingsLoading(false);
     }
   };
 
@@ -103,13 +159,15 @@ export default function CheckoutScreen() {
   };
 
   const getTax = () => {
-    return getSubtotal() * TAX_RATE;
+    if (!settings) return 0;
+    return getSubtotal() * (settings.gstRate / 100);
   };
 
   const getTotal = () => {
+    if (!settings) return getSubtotal();
     const subtotal = getSubtotal();
     const tax = getTax();
-    return subtotal + tax + DELIVERY_CHARGE + APP_FEE;
+    return subtotal + tax + settings.deliveryCharge + settings.appFee;
   };
 
   const clearCart = async () => {
@@ -131,74 +189,81 @@ export default function CheckoutScreen() {
     }
   };
 
+  const handleAddressSelect = (addressData: AddressData) => {
+    setDeliveryAddress(addressData);
+  };
+
+  const handleSelectAddress = () => {
+    // Navigate to address selection screen
+    router.push('/address?from=checkout');
+  };
+
   const handlePlaceOrder = async () => {
-    if (!deliveryAddress.address.trim()) {
-      Alert.alert('Error', 'Please enter your delivery address');
+    if (!deliveryAddress) {
+      Alert.alert('Error', 'Please select a delivery address');
       return;
     }
 
-    if (!deliveryAddress.city.trim()) {
-      Alert.alert('Error', 'Please enter your city');
+    if (!token) {
+      Alert.alert('Error', 'Please login to place an order');
       return;
     }
 
-    if (!deliveryAddress.pincode.trim()) {
-      Alert.alert('Error', 'Please enter your pincode');
+    if (!settings) {
+      Alert.alert('Error', 'Fee settings not loaded');
       return;
     }
 
     setPlacingOrder(true);
     try {
+      const orderData = {
+        items: cartItems.map(item => ({
+          product: item.product._id,
+          quantity: item.quantity,
+          price: item.product.price,
+        })),
+        deliveryAddress: {
+          address: deliveryAddress.address,
+          city: deliveryAddress.city,
+          state: deliveryAddress.state,
+          pincode: deliveryAddress.pincode,
+        },
+        paymentMethod: selectedPaymentMethod,
+        subtotal: getSubtotal(),
+        tax: getTax(),
+        deliveryCharge: settings.deliveryCharge,
+        appFee: settings.appFee,
+        totalAmount: getTotal(),
+      };
+
       const response = await fetch(`${API_BASE_URL}/orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          items: cartItems.map(item => ({
-            product: item.product._id,
-            quantity: item.quantity,
-            price: item.product.price,
-          })),
-          deliveryAddress: {
-            address: deliveryAddress.address,
-            city: deliveryAddress.city,
-            state: deliveryAddress.state,
-            pincode: deliveryAddress.pincode,
-          },
-          paymentMethod: selectedPaymentMethod,
-          subtotal: getSubtotal(),
-          tax: getTax(),
-          deliveryCharge: DELIVERY_CHARGE,
-          appFee: APP_FEE,
-          totalAmount: getTotal(),
-        }),
+        body: JSON.stringify(orderData),
       });
 
       if (response.ok) {
-        // Clear the cart after successful order
         await clearCart();
-        
         Alert.alert(
           'Order Placed Successfully!',
           'Your order has been placed and will be delivered soon.',
           [
             {
               text: 'OK',
-              onPress: () => {
-                router.replace('/(tabs)');
-              },
+              onPress: () => router.push('/(tabs)'),
             },
           ]
         );
       } else {
-        const data = await response.json();
-        Alert.alert('Error', data.message || 'Failed to place order');
+        const errorData = await response.json();
+        Alert.alert('Error', errorData.message || 'Failed to place order');
       }
     } catch (error) {
       console.error('Error placing order:', error);
-      Alert.alert('Error', 'Failed to place order');
+      Alert.alert('Error', 'Failed to place order. Please try again.');
     } finally {
       setPlacingOrder(false);
     }
@@ -211,39 +276,34 @@ export default function CheckoutScreen() {
         <Text style={styles.sectionTitle}>Delivery Address</Text>
       </View>
       
-      <View style={styles.addressContainer}>
-        <TextInput
-          style={styles.addressInput}
-          value={deliveryAddress.address}
-          onChangeText={(text) => setDeliveryAddress(prev => ({ ...prev, address: text }))}
-          placeholder="Enter your delivery address"
-          multiline
-          numberOfLines={3}
-        />
-        
-        <View style={styles.addressRow}>
-          <TextInput
-            style={[styles.addressInput, styles.halfWidth]}
-            value={deliveryAddress.city}
-            onChangeText={(text) => setDeliveryAddress(prev => ({ ...prev, city: text }))}
-            placeholder="City"
-          />
-          <TextInput
-            style={[styles.addressInput, styles.halfWidth]}
-            value={deliveryAddress.state}
-            onChangeText={(text) => setDeliveryAddress(prev => ({ ...prev, state: text }))}
-            placeholder="State"
-          />
+      {deliveryAddress ? (
+        <View style={styles.addressCard}>
+          <View style={styles.addressInfo}>
+            <Text style={styles.addressText}>{deliveryAddress.fullAddress}</Text>
+            {deliveryAddress.coordinates && (
+              <Text style={styles.coordinatesText}>
+                Coordinates: {deliveryAddress.coordinates.latitude.toFixed(4)}, {deliveryAddress.coordinates.longitude.toFixed(4)}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity 
+            style={styles.changeAddressButton}
+            onPress={handleSelectAddress}
+          >
+            <Ionicons name="create-outline" size={16} color="#007AFF" />
+            <Text style={styles.changeAddressText}>Change</Text>
+          </TouchableOpacity>
         </View>
-        
-        <TextInput
-          style={styles.addressInput}
-          value={deliveryAddress.pincode}
-          onChangeText={(text) => setDeliveryAddress(prev => ({ ...prev, pincode: text }))}
-          placeholder="Pincode"
-          keyboardType="numeric"
-        />
-      </View>
+      ) : (
+        <TouchableOpacity 
+          style={styles.selectAddressButton}
+          onPress={handleSelectAddress}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
+          <Text style={styles.selectAddressText}>Select Delivery Address</Text>
+          <Ionicons name="chevron-forward" size={20} color="#ccc" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -280,18 +340,18 @@ export default function CheckoutScreen() {
       </View>
       
       <View style={styles.priceRow}>
-        <Text style={styles.priceLabel}>Tax (5% GST)</Text>
+        <Text style={styles.priceLabel}>Tax ({settings ? settings.gstRate : 0}% GST)</Text>
         <Text style={styles.priceValue}>₹{getTax().toFixed(2)}</Text>
       </View>
       
       <View style={styles.priceRow}>
         <Text style={styles.priceLabel}>Delivery Charge</Text>
-        <Text style={styles.priceValue}>₹{DELIVERY_CHARGE}</Text>
+        <Text style={styles.priceValue}>₹{settings ? settings.deliveryCharge : 0}</Text>
       </View>
       
       <View style={styles.priceRow}>
         <Text style={styles.priceLabel}>App Fee</Text>
-        <Text style={styles.priceValue}>₹{APP_FEE}</Text>
+        <Text style={styles.priceValue}>₹{settings ? settings.appFee : 0}</Text>
       </View>
       
       <View style={[styles.priceRow, styles.totalRow]}>
@@ -346,7 +406,7 @@ export default function CheckoutScreen() {
     </View>
   );
 
-  if (loading) {
+  if (loading || settingsLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -637,5 +697,57 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  addressCard: {
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  addressInfo: {
+    marginBottom: 12,
+  },
+  addressText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  coordinatesText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  changeAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  changeAddressText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  selectAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  selectAddressText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginLeft: 12,
   },
 }); 

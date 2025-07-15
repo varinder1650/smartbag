@@ -59,38 +59,10 @@ const authLimiter = rateLimit({
   }
 });
 
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or Postman)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://10.0.0.74:3000',
-      'http://10.0.0.74:3001',
-      // Add your deployed frontend URLs here
-      // 'https://your-admin-panel.vercel.app',
-      // 'https://your-mobile-app.expo.dev'
-    ];
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-};
-
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cors(corsOptions));
+app.use(cors());
 
 // Performance monitoring middleware
 app.use((req, res, next) => {
@@ -145,6 +117,8 @@ app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/order'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/user', require('./routes/user'));
+app.use('/api/address', require('./routes/address'));
+app.use('/api/settings', require('./routes/settings'));
 
 // Specific route for serving images with proper headers (moved after API routes)
 app.get('/uploads/:filename', (req, res) => {

@@ -25,6 +25,7 @@ const Dashboard = () => {
     brands: 0,
     orders: 0,
     users: 0,
+    totalSales: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -60,12 +61,18 @@ const Dashboard = () => {
       const safeOrders = Array.isArray(ordersArray) ? ordersArray : [];
       const safeUsers = Array.isArray(usersArray) ? usersArray : [];
 
+      // Calculate total sales from orders
+      const totalSales = safeOrders.reduce((sum, order) => {
+        return sum + (order.totalAmount || 0);
+      }, 0);
+
       console.log('Dashboard stats:', {
         products: safeProducts.length,
         categories: safeCategories.length,
         brands: safeBrands.length,
         orders: safeOrders.length,
         users: safeUsers.length,
+        totalSales: totalSales,
       });
 
       setStats({
@@ -74,6 +81,7 @@ const Dashboard = () => {
         brands: safeBrands.length,
         orders: safeOrders.length,
         users: safeUsers.length,
+        totalSales: totalSales,
       });
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
@@ -172,7 +180,7 @@ const Dashboard = () => {
         <Grid item xs={12} sm={6} md={4}>
           <StatCard
             title="Total Sales"
-            value="₹0"
+            value={`₹${stats.totalSales.toLocaleString()}`}
             icon={<SalesIcon sx={{ color: 'white' }} />}
             color="error.main"
           />

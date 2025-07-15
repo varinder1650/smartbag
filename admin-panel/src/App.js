@@ -14,6 +14,7 @@ import Categories from './components/Categories';
 import Brands from './components/Brands';
 import Orders from './components/Orders';
 import Users from './components/Users';
+import Settings from './components/Settings';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Services
@@ -124,6 +125,18 @@ function App() {
                   <AdminLayout>
                     <ErrorBoundary>
                       <Users />
+                    </ErrorBoundary>
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <ErrorBoundary>
+                      <Settings />
                     </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>

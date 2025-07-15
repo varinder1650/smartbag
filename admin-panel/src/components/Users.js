@@ -85,7 +85,7 @@ const Users = () => {
   }
 
   return (
-    <Box>
+    <Box sx={{ pt: 10 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Users</Typography>
       </Box>

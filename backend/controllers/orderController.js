@@ -37,6 +37,11 @@ exports.createOrder = async (req, res) => {
       appFee: appFee || 0,
       totalAmount,
       paymentStatus: paymentMethod === 'online' ? 'pending' : 'pending',
+      statusChangeHistory: [{
+        status: 'pending',
+        changedAt: new Date(),
+        changedBy: req.user.name || 'Customer',
+      }],
     });
 
     // Populate product details for response
@@ -101,13 +106,27 @@ exports.getAllOrders = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    ).populate('user', 'name email phone');
     
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    // Find the order first
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Update status and add to history
+    order.status = status;
+    order.statusChangeHistory.push({
+      status: status,
+      changedAt: new Date(),
+      changedBy: req.user.name || 'Admin',
+    });
+
+    // Save the order
+    await order.save();
+
+    // Populate user details for response
+    await order.populate('user', 'name email phone');
+    
     res.json(order);
   } catch (err) {
     console.error('Update order status error:', err);

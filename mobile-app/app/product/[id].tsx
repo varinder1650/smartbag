@@ -195,6 +195,7 @@ export default function ProductDetailScreen() {
             maxToRenderPerBatch={2}
             windowSize={3}
             removeClippedSubviews={true}
+            nestedScrollEnabled={true}
           />
           {renderDotIndicator()}
         </View>

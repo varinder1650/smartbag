@@ -3,7 +3,11 @@ import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { router } from 'expo-router';
 
-export default function AuthWrapper({ children }) {
+interface AuthWrapperProps {
+  children: React.ReactNode;
+}
+
+export default function AuthWrapper({ children }: AuthWrapperProps) {
   const { user, loading } = useAuth();
 
   React.useEffect(() => {

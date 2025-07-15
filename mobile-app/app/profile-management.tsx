@@ -49,7 +49,7 @@ export default function ProfileManagementScreen() {
     }
   };
 
-  const updateField = (field, value) => {
+  const updateField = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 

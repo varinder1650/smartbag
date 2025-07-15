@@ -3,7 +3,7 @@ const router = express.Router();
 const categoryController = require('../controllers/categoryController');
 const upload = require('../middleware/upload');
 
-router.post('/', categoryController.createCategory);
+router.post('/', upload.single('icon'), categoryController.createCategory);
 router.get('/', categoryController.getCategories);
 router.put('/:id', categoryController.updateCategory);
 router.delete('/:id', categoryController.deleteCategory);

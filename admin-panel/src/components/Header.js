@@ -51,9 +51,25 @@ const Header = ({ onMenuClick }) => {
         >
           <MenuIcon />
         </IconButton>
-        <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-          Admin Panel
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+          <img 
+            src="/logo.png" 
+            alt="Company Logo" 
+            style={{ 
+              height: '32px', 
+              width: 'auto',
+              maxWidth: '120px',
+              marginRight: '16px'
+            }}
+            onError={(e) => {
+              // Hide logo if image fails to load
+              e.target.style.display = 'none';
+            }}
+          />
+          <Typography variant="h6" noWrap component="div">
+            Admin Panel
+          </Typography>
+        </Box>
         <Box>
           <IconButton
             size="large"

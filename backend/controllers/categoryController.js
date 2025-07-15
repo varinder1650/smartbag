@@ -2,7 +2,18 @@ const Category = require('../models/Category');
 
 exports.createCategory = async (req, res) => {
   try {
-    const category = await Category.create(req.body);
+    // If multipart/form-data, req.body fields may be strings; parse if needed
+    const data = { ...req.body };
+    if (req.file) {
+      data.icon = `/uploads/${req.file.filename}`;
+    }
+    // Ensure name is present and trimmed
+    if (!data.name || !data.name.trim()) {
+      return res.status(400).json({ message: 'Category name is required.' });
+    }
+    data.name = data.name.trim();
+    // Create the category
+    const category = await Category.create(data);
     res.status(201).json(category);
   } catch (err) {
     res.status(400).json({ message: err.message });

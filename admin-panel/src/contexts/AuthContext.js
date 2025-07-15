@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Set up axios defaults with environment variable support
-  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001/api';
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
   axios.defaults.baseURL = apiBaseUrl;
 
   // Add request interceptor for better error handling

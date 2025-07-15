@@ -79,6 +79,36 @@ const orderSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
+  statusChangeHistory: [
+    {
+      status: {
+        type: String,
+        enum: ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'],
+        required: true,
+      },
+      changedAt: {
+        type: Date,
+        default: Date.now,
+      },
+      changedBy: {
+        type: String,
+        default: 'system',
+      },
+    },
+  ],
 }, { timestamps: true });
+
+// Pre-save middleware to track status changes
+orderSchema.pre('save', function(next) {
+  if (this.isModified('status')) {
+    // Add to status change history
+    this.statusChangeHistory.push({
+      status: this.status,
+      changedAt: new Date(),
+      changedBy: 'system', // This will be updated by the controller
+    });
+  }
+  next();
+});
 
 module.exports = mongoose.model('Order', orderSchema); 
