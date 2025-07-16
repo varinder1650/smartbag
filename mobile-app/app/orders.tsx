@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+const API_BASE_URL = 'http://10.0.0.108:3001/api';
 
 interface OrderItem {
   product: {

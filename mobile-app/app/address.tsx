@@ -24,7 +24,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+const API_BASE_URL = 'http://10.0.0.108:3001/api';
 
 interface SearchResult {
   place_id: string;

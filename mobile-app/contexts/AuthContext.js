@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+const API_BASE_URL = 'http://10.0.0.108:3001/api';
 
 console.log('=== API IMPORT DEBUG ===');
 console.log('API_BASE_URL set:', API_BASE_URL);

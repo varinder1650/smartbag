@@ -17,7 +17,7 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-ico
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 // Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+const API_BASE_URL = 'http://10.0.0.108:3001/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -44,7 +44,7 @@ interface SectionData {
   title?: string;
 }
 
-const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
+const IMAGE_BASE_URL = 'http://10.0.0.108:3001';
 
 const HomeScreen = () => {
   // Use AuthContext directly

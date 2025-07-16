@@ -30,6 +30,7 @@ import {
   Delete as DeleteImageIcon,
   Info as InfoIcon,
   Image as ImageIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import { apiService, extractData, handleApiError } from '../services/api';
@@ -58,6 +59,13 @@ const Products = () => {
 
   useEffect(() => {
     fetchData();
+    
+    // Auto-refresh every 30 seconds to keep stock updated
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {
@@ -234,7 +242,7 @@ const Products = () => {
         const images = params.value || [];
         const fallback =
           'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="100%" height="100%" fill="%23e0e0e0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="%23777">No Img</text></svg>';
-        const backendBase = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001';
+        const backendBase = process.env.REACT_APP_API_URL || 'http://10.0.0.108:3001';
         return (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             {images.length > 0 ? (
@@ -300,13 +308,23 @@ const Products = () => {
     <Box sx={{ mt: 8 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Products</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAdd}
-        >
-          Add Product
-        </Button>
+        <Box>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={fetchData}
+            sx={{ mr: 2, borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAdd}
+          >
+            Add Product
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -573,9 +591,9 @@ const Products = () => {
                       {existingImages.map((image, index) => {
                         let imageUrl;
                         if (image.startsWith('/uploads/')) {
-                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001'}${image}?_t=${Date.now()}`;
+                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.108:3001'}${image}?_t=${Date.now()}`;
                         } else {
-                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001'}/uploads/${image}?_t=${Date.now()}`;
+                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.108:3001'}/uploads/${image}?_t=${Date.now()}`;
                         }
                         return (
                           <Grid item key={index}>

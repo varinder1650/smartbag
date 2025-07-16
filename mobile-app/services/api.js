@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://10.0.0.74:3001/api',
+  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://10.0.0.108:3001/api',
   timeout: 10000,
 });
 

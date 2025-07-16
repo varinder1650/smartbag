@@ -128,8 +128,16 @@ exports.updateProduct = async (req, res) => {
       images = req.files.map(file => `/uploads/${file.filename}`);
     }
     
-    // Also check for existing image URLs in the form data
-    if (req.body.images) {
+    // Check for existing image URLs in the form data (admin panel sends 'existingImages')
+    if (req.body.existingImages) {
+      const existingImages = Array.isArray(req.body.existingImages) 
+        ? req.body.existingImages 
+        : [req.body.existingImages];
+      images = [...images, ...existingImages];
+    }
+    
+    // Also check for 'images' field (fallback)
+    if (req.body.images && images.length === 0) {
       const existingImages = Array.isArray(req.body.images) 
         ? req.body.images 
         : [req.body.images];

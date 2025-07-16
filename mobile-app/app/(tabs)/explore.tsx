@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 // Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+const API_BASE_URL = 'http://10.0.0.108:3001/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';

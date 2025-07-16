@@ -14,8 +14,8 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 // Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
-const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
+const API_BASE_URL = 'http://10.0.0.108:3001/api';
+const IMAGE_BASE_URL = 'http://10.0.0.108:3001';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -216,27 +216,16 @@ export default function ProductDetailScreen() {
           <Text style={styles.detailLabel}>Brand:</Text>
           <Text style={styles.detailValue}>{product.brand?.name || 'N/A'}</Text>
         </View>
-        
-        <View style={styles.detailsRow}>
-          <Text style={styles.detailLabel}>Stock:</Text>
-          <Text style={styles.detailValue}>
-            {product.stock > 0 ? `${product.stock} available` : 'Out of stock'}
-          </Text>
-        </View>
       </View>
 
       {/* Add to Cart Button */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={[
-            styles.addToCartButton,
-            product.stock === 0 && styles.disabledButton
-          ]}
+          style={styles.addToCartButton}
           onPress={addToCart}
-          disabled={product.stock === 0}
         >
           <Text style={styles.addToCartText}>
-            {product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
+            Add to Cart
           </Text>
         </TouchableOpacity>
       </View>
