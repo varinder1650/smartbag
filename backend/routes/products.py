@@ -11,6 +11,7 @@ import io
 
 from models.product import ProductCreate, ProductUpdate, ProductResponse, ProductInDB
 from utils.database import DatabaseManager, get_database
+from utils.mongo import fix_mongo_types
 from utils.auth import get_current_active_user, get_current_admin_user
 from models.user import UserInDB
 
@@ -98,15 +99,35 @@ async def create_product(
             "category": ObjectId(category),
             "brand": ObjectId(brand),
             "keywords": keyword_list,
-            "images": image_urls
+            "images": image_urls,
+            "is_active": True
         }
         
         product_id = await db.insert_one("products", product_dict)
         created_product = await db.find_one("products", {"_id": ObjectId(product_id)})
-        created_product["category"] = category_obj
-        created_product["brand"] = brand_obj
-        
-        return ProductResponse(**created_product)
+        # Defensive: ensure category_obj and brand_obj are not None
+        if not category_obj or not brand_obj:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Category or Brand not found after creation."
+            )
+        # Only include fields expected by ProductResponse
+        allowed_fields = {
+            "_id", "name", "description", "price", "images", "category", "brand", "stock", "is_active", "keywords", "created_at", "updated_at"
+        }
+        filtered_product = {k: v for k, v in created_product.items() if k in allowed_fields}
+        # Convert _id to string if present
+        if "_id" in filtered_product:
+            filtered_product["_id"] = str(filtered_product["_id"])
+        filtered_product["category"] = {
+            "_id": str(category_obj["_id"]),
+            "name": category_obj["name"]
+        }
+        filtered_product["brand"] = {
+            "_id": str(brand_obj["_id"]),
+            "name": brand_obj["name"]
+        }
+        return ProductResponse(**filtered_product)
         
     except HTTPException:
         raise
@@ -190,7 +211,7 @@ async def get_products(
         total = await db.count_documents("products", query)
         
         return {
-            "products": [ProductResponse(**product) for product in products],
+            "products": [ProductResponse(**fix_mongo_types(product)) for product in products],
             "pagination": {
                 "currentPage": page,
                 "totalPages": (total + limit - 1) // limit,
@@ -251,7 +272,7 @@ async def get_product(
                 detail="Product not found"
             )
         
-        return ProductResponse(**products[0])
+        return ProductResponse(**fix_mongo_types(products[0]))
         
     except HTTPException:
         raise

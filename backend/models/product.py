@@ -21,11 +21,6 @@ class ProductBase(BaseModel):
     is_active: bool = True
     keywords: Optional[List[str]] = Field(default=[], description="Keywords/tags for product search")
 
-    @field_validator('category', 'brand')
-    @classmethod
-    def validate_object_ids(cls, v):
-        return validate_object_id(v)
-
 class ProductCreate(ProductBase):
     pass
 

@@ -111,9 +111,8 @@ class DatabaseManager:
             return await cursor.to_list(length=None)
         except Exception as e:
             logger.error(f"Error performing aggregation on {collection}: {e}")
-            raise
+            raise 
 
-def get_database() -> DatabaseManager:
-    """Get database manager instance"""
+def get_database() -> 'DatabaseManager':
     from main import client
     return DatabaseManager(client, "blinkit_clone") 
