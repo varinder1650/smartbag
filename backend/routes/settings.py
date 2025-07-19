@@ -126,3 +126,27 @@ async def update_settings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update settings"
         ) 
+
+@router.get("/public")
+async def get_public_settings(
+    db: DatabaseManager = Depends(get_database)
+):
+    """Get public app settings (no authentication required)"""
+    try:
+        # Get settings from database
+        settings_doc = await db.find_one("settings", {"_id": "app_settings"})
+        
+        if not settings_doc:
+            # Create default settings if none exist
+            settings_doc = {"_id": "app_settings", **DEFAULT_SETTINGS}
+            await db.insert_one("settings", settings_doc)
+            return DEFAULT_SETTINGS
+        
+        # Remove _id from response and return only public fields
+        settings = {k: v for k, v in settings_doc.items() if k != "_id"}
+        return settings
+        
+    except Exception as e:
+        logger.error(f"Get public settings error: {e}")
+        # Return default settings as fallback
+        return DEFAULT_SETTINGS 

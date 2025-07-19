@@ -26,7 +26,7 @@ if not exist ".env" (
         echo JWT_SECRET_KEY=your-secret-key-change-this-in-production
         echo JWT_ALGORITHM=HS256
         echo ACCESS_TOKEN_EXPIRE_MINUTES=30
-        echo GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+        echo OLA_KRUTRIM_API_KEY=your-ola-krutrim-api-key
         echo PORT=3001
         echo ENVIRONMENT=development
     ) > .env

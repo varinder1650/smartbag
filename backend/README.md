@@ -8,7 +8,7 @@ This is the Python FastAPI backend for the Blinkit Clone application, converted 
 - **MongoDB Integration**: Async MongoDB operations with Motor
 - **JWT Authentication**: Secure token-based authentication
 - **File Upload**: Image upload functionality with validation
-- **Google Maps Integration**: Address search, geocoding, and validation
+- **Ola Krutrim Maps Integration**: Address search, geocoding, and validation
 - **Rate Limiting**: API rate limiting with SlowAPI
 - **CORS Support**: Cross-origin resource sharing enabled
 - **Comprehensive API**: Complete REST API for all app features
@@ -79,7 +79,7 @@ This is the Python FastAPI backend for the Blinkit Clone application, converted 
 
 - Python 3.8+
 - MongoDB
-- Google Maps API Key (for address features)
+- Ola Krutrim Maps API Key (for address features)
 
 ### Installation
 
@@ -106,7 +106,7 @@ This is the Python FastAPI backend for the Blinkit Clone application, converted 
    JWT_SECRET_KEY=your-secret-key-here
    JWT_ALGORITHM=HS256
    ACCESS_TOKEN_EXPIRE_MINUTES=30
-   GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+   OLA_KRUTRIM_API_KEY=your-ola-krutrim-api-key
    PORT=3001
    ENVIRONMENT=development
    ```
@@ -147,7 +147,7 @@ python test_server.py
 
 - **Stock Management**: Automatic stock decrement on order placement
 - **Image Handling**: Secure file upload with validation
-- **Address Validation**: Google Maps integration for address verification
+- **Address Validation**: Ola Krutrim Maps integration for address verification
 - **Order Tracking**: Status change history for orders
 - **Settings Management**: Dynamic app configuration
 
@@ -218,8 +218,8 @@ backend/
    - Ensure `uploads/` directory exists
    - Check file permissions
 
-4. **Google Maps API Errors**
-   - Verify GOOGLE_MAPS_API_KEY is set
+4. **Ola Krutrim Maps API Errors**
+   - Verify OLA_KRUTRIM_API_KEY is set
    - Check API key permissions and quotas
 
 ## License

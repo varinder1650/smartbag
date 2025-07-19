@@ -15,33 +15,49 @@ router = APIRouter()
 
 @router.post("/", response_model=OrderResponse)
 async def create_order(
-    order_data: OrderCreate,
+    order_data: dict,
     current_user: UserInDB = Depends(get_current_active_user),
     db: DatabaseManager = Depends(get_database)
 ):
     """Create a new order"""
     try:
+        logger.info(f"Order creation request from user: {current_user.email}")
+        logger.info(f"Order data received: {order_data}")
+        
         # Validate required fields
-        if not order_data.items:
+        if not order_data.get("items"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Order items are required"
             )
         
-        if not order_data.delivery_address:
+        if not order_data.get("delivery_address"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Complete delivery address is required"
             )
         
-        if order_data.total_amount <= 0:
+        if not order_data.get("total_amount") or order_data["total_amount"] <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Valid total amount is required"
             )
         
+        # Add user ID to order data
+        order_data["user"] = current_user.id
+        
+        # Validate order data with Pydantic model
+        try:
+            validated_order = OrderCreate(**order_data)
+        except Exception as validation_error:
+            logger.error(f"Order validation error: {validation_error}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid order data: {str(validation_error)}"
+            )
+        
         # Check stock for all products
-        for item in order_data.items:
+        for item in validated_order.items:
             product = await db.find_one("products", {"_id": ObjectId(item.product)})
             if not product:
                 raise HTTPException(
@@ -55,7 +71,7 @@ async def create_order(
                 )
         
         # Decrement stock for all products
-        for item in order_data.items:
+        for item in validated_order.items:
             await db.update_one(
                 "products",
                 {"_id": ObjectId(item.product)},
@@ -63,7 +79,7 @@ async def create_order(
             )
         
         # Create order
-        order_dict = order_data.dict()
+        order_dict = validated_order.dict()
         order_dict["user"] = ObjectId(current_user.id)
         order_dict["status_change_history"] = [{
             "status": "pending",
@@ -72,6 +88,7 @@ async def create_order(
         }]
         
         order_id = await db.insert_one("orders", order_dict)
+        logger.info(f"Order created successfully with ID: {order_id}")
         
         # Clear user's cart
         cart = await db.find_one("carts", {"user": ObjectId(current_user.id)})
@@ -81,6 +98,7 @@ async def create_order(
                 {"_id": cart["_id"]},
                 {"items": []}
             )
+            logger.info("User cart cleared successfully")
         
         # Get created order
         created_order = await db.find_one("orders", {"_id": ObjectId(order_id)})
@@ -94,6 +112,151 @@ async def create_order(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create order"
         )
+
+@router.post("/debug", response_model=dict)
+async def create_debug_order(
+    order_data: dict,
+    db: DatabaseManager = Depends(get_database)
+):
+    """Create a debug order that bypasses authentication"""
+    try:
+        logger.info(f"Debug order creation request")
+        logger.info(f"Order data received: {order_data}")
+        
+        # Validate required fields
+        if not order_data.get("items"):
+            return {"error": "Order items are required"}
+        
+        if not order_data.get("delivery_address"):
+            return {"error": "Complete delivery address is required"}
+        
+        if not order_data.get("total_amount") or order_data["total_amount"] <= 0:
+            return {"error": "Valid total amount is required"}
+        
+        # Create a debug order document
+        order_doc = {
+            "user": ObjectId("687b2bc0daea4a6658a34212"),  # Test user ID - updated to match test user
+            "items": order_data["items"],
+            "delivery_address": order_data["delivery_address"],
+            "payment_method": order_data.get("payment_method", "cod"),
+            "subtotal": order_data.get("subtotal", 0),
+            "tax": order_data.get("tax", 0),
+            "delivery_charge": order_data.get("delivery_charge", 0),
+            "app_fee": order_data.get("app_fee", 0),
+            "total_amount": order_data["total_amount"],
+            "payment_status": "pending",
+            "order_status": "pending",
+            "status_change_history": [{
+                "status": "pending",
+                "changed_at": datetime.utcnow(),
+                "changed_by": "Debug User"
+            }],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        order_id = await db.insert_one("orders", order_doc)
+        logger.info(f"Debug order created successfully with ID: {order_id}")
+        
+        return {
+            "success": True,
+            "message": "Debug order created successfully",
+            "order_id": str(order_id),
+            "total_amount": order_data["total_amount"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug order creation error: {e}")
+        return {"error": str(e)}
+
+@router.post("/test", response_model=dict)
+async def test_order_creation(
+    order_data: dict,
+    current_user: UserInDB = Depends(get_current_active_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    """Test endpoint to debug order creation"""
+    try:
+        logger.info(f"Test order data received: {order_data}")
+        logger.info(f"Current user: {current_user.email}")
+        
+        # Validate basic structure
+        if not order_data.get("items"):
+            return {"error": "No items in order"}
+        
+        if not order_data.get("delivery_address"):
+            return {"error": "No delivery address"}
+        
+        if not order_data.get("total_amount"):
+            return {"error": "No total amount"}
+        
+        return {
+            "success": True,
+            "message": "Order data validation passed",
+            "user": current_user.email,
+            "items_count": len(order_data.get("items", [])),
+            "total_amount": order_data.get("total_amount")
+        }
+        
+    except Exception as e:
+        logger.error(f"Test order error: {e}")
+        return {"error": str(e)}
+
+@router.post("/simple", response_model=dict)
+async def create_simple_order(
+    order_data: dict,
+    db: DatabaseManager = Depends(get_database)
+):
+    """Create a simple order without authentication for testing"""
+    try:
+        logger.info(f"Simple order creation request")
+        logger.info(f"Order data received: {order_data}")
+        
+        # Validate required fields
+        if not order_data.get("items"):
+            return {"error": "Order items are required"}
+        
+        if not order_data.get("delivery_address"):
+            return {"error": "Complete delivery address is required"}
+        
+        if not order_data.get("total_amount") or order_data["total_amount"] <= 0:
+            return {"error": "Valid total amount is required"}
+        
+        # Create a simple order document
+        order_doc = {
+            "user": ObjectId("687b2bc0daea4a6658a34212"),  # Test user ID - updated to match test user
+            "items": order_data["items"],
+            "delivery_address": order_data["delivery_address"],
+            "payment_method": order_data.get("payment_method", "cod"),
+            "subtotal": order_data.get("subtotal", 0),
+            "tax": order_data.get("tax", 0),
+            "delivery_charge": order_data.get("delivery_charge", 0),
+            "app_fee": order_data.get("app_fee", 0),
+            "total_amount": order_data["total_amount"],
+            "payment_status": "pending",
+            "order_status": "pending",
+            "status_change_history": [{
+                "status": "pending",
+                "changed_at": datetime.utcnow(),
+                "changed_by": "Test User"
+            }],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        order_id = await db.insert_one("orders", order_doc)
+        logger.info(f"Simple order created successfully with ID: {order_id}")
+        
+        return {
+            "success": True,
+            "message": "Order created successfully",
+            "order_id": str(order_id),
+            "total_amount": order_data["total_amount"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Simple order creation error: {e}")
+        return {"error": str(e)}
 
 @router.get("/", response_model=List[OrderResponse])
 async def get_orders(
@@ -113,7 +276,33 @@ async def get_orders(
                 sort=[("created_at", -1)]
             )
         
-        return [OrderResponse(**order) for order in orders]
+        # Enhance orders with user information
+        enhanced_orders = []
+        for order in orders:
+            # Fetch user information - convert string user ID back to ObjectId for lookup
+            user_id = order["user"]
+            if isinstance(user_id, str):
+                user_id = ObjectId(user_id)
+            
+            user = await db.find_one("users", {"_id": user_id})
+            
+            if user:
+                # Add user information to order
+                order["user_info"] = {
+                    "name": user.get("name", "Unknown"),
+                    "email": user.get("email", "N/A"),
+                    "phone": user.get("phone", "N/A")
+                }
+            else:
+                # Fallback if user not found
+                order["user_info"] = {
+                    "name": "Unknown User",
+                    "email": "N/A",
+                    "phone": "N/A"
+                }
+            enhanced_orders.append(order)
+        
+        return [OrderResponse(**order) for order in enhanced_orders]
         
     except Exception as e:
         logger.error(f"Get orders error: {e}")

@@ -41,7 +41,7 @@ Successfully converted the entire Node.js/Express backend to Python FastAPI whil
 ### ✅ Features Preserved
 - **Stock Management**: Automatic stock decrement on order placement
 - **Image Handling**: Secure file upload with validation
-- **Address Validation**: Google Maps API integration
+- **Address Validation**: Ola Krutrim Maps API integration
 - **Order Tracking**: Status change history
 - **Settings Management**: Dynamic app configuration
 - **User Authentication**: JWT-based auth with role-based access

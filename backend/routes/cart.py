@@ -3,23 +3,49 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from typing import List
 import logging
 from bson import ObjectId
+from pydantic import BaseModel
 
 from models.cart import CartItem, CartCreate, CartUpdate, CartResponse
 from utils.database import DatabaseManager, get_database
 from utils.auth import get_current_active_user
 from models.user import UserInDB
+from utils.mongo import fix_mongo_types
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+class AddToCartRequest(BaseModel):
+    productId: str
+    quantity: int = 1
+
+class UpdateCartItemRequest(BaseModel):
+    itemId: str
+    quantity: int
+
+@router.get("/public")
+async def get_cart_public(
+    db: DatabaseManager = Depends(get_database)
+):
+    """Get cart for non-authenticated users (returns empty cart)"""
+    try:
+        # For non-authenticated users, return empty cart
+        return {"items": [], "message": "No authenticated user"}
+    except Exception as e:
+        logger.error(f"Get public cart error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get cart"
+        )
+
 @router.post("/add")
 async def add_to_cart(
-    product_id: str,
-    quantity: int = 1,
+    req: AddToCartRequest,
     current_user: UserInDB = Depends(get_current_active_user),
     db: DatabaseManager = Depends(get_database)
 ):
     """Add product to cart"""
+    product_id = req.productId
+    quantity = req.quantity
     try:
         if not ObjectId.is_valid(product_id):
             raise HTTPException(
@@ -94,23 +120,27 @@ async def get_cart(
     """Get user's cart"""
     try:
         cart = await db.find_one("carts", {"user": ObjectId(current_user.id)})
-        
+        logger.info(f"Fetched cart for user {current_user.id}: {cart}")
         if not cart:
             return {"items": []}
-        
         # Populate product details
         items_with_products = []
         for item in cart["items"]:
+            logger.info(f"Processing cart item: {item}")
             product = await db.find_one("products", {"_id": item["product"]})
             if product:
+                # Convert ObjectId fields to strings for serialization
+                product_fixed = fix_mongo_types(product)
+                item_id = str(item.get("_id", "")) if item.get("_id") else ""
                 items_with_products.append({
-                    "_id": str(item["_id"]),
-                    "product": product,
-                    "quantity": item["quantity"]
+                    "_id": item_id,
+                    "product": product_fixed,
+                    "quantity": item.get("quantity", 0)
                 })
-        
+            else:
+                logger.warning(f"Cart item references missing product: {item['product']}")
+        logger.info(f"Returning cart items: {items_with_products}")
         return {"items": items_with_products}
-        
     except Exception as e:
         logger.error(f"Get cart error: {e}")
         raise HTTPException(
@@ -120,30 +150,28 @@ async def get_cart(
 
 @router.put("/update")
 async def update_cart_item(
-    item_id: str,
-    quantity: int,
+    req: UpdateCartItemRequest,
     current_user: UserInDB = Depends(get_current_active_user),
     db: DatabaseManager = Depends(get_database)
 ):
-    """Update cart item quantity"""
+    item_id = req.itemId
+    quantity = req.quantity
     try:
         if quantity <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Quantity must be greater than 0"
             )
-        
         cart = await db.find_one("carts", {"user": ObjectId(current_user.id)})
         if not cart:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Cart not found"
             )
-        
         # Find and update item
         item_found = False
         for item in cart["items"]:
-            if str(item["_id"]) == item_id:
+            if str(item.get("_id", "")) == item_id:
                 # Check if product is in stock
                 product = await db.find_one("products", {"_id": item["product"]})
                 if not product:
@@ -151,32 +179,26 @@ async def update_cart_item(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="Product not found"
                     )
-                
                 if product["stock"] < quantity:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Not enough stock available"
                     )
-                
                 item["quantity"] = quantity
                 item_found = True
                 break
-        
         if not item_found:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Item not found in cart"
             )
-        
         # Update cart
         await db.update_one(
             "carts",
             {"_id": cart["_id"]},
             {"items": cart["items"]}
         )
-        
         return {"message": "Cart updated"}
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -202,7 +224,7 @@ async def remove_from_cart(
             )
         
         # Remove item
-        cart["items"] = [item for item in cart["items"] if str(item["_id"]) != item_id]
+        cart["items"] = [item for item in cart["items"] if str(item.get("_id", "")) != item_id]
         
         # Update cart
         await db.update_one(
@@ -231,7 +253,10 @@ async def clear_cart(
     try:
         cart = await db.find_one("carts", {"user": ObjectId(current_user.id)})
         if not cart:
-            return {"message": "Cart is already empty"}
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cart not found"
+            )
         
         # Clear cart items
         await db.update_one(
@@ -242,6 +267,8 @@ async def clear_cart(
         
         return {"message": "Cart cleared"}
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Clear cart error: {e}")
         raise HTTPException(
