@@ -62,7 +62,13 @@ class DatabaseManager:
                         update_dict: Dict[str, Any]) -> bool:
         """Update one document in collection"""
         try:
-            result = await self.db[collection].update_one(filter_dict, {"$set": update_dict})
+            # Check if update_dict already contains MongoDB operators ($set, $inc, etc.)
+            if any(key.startswith('$') for key in update_dict.keys()):
+                # Use the update_dict directly (for $inc, $set, etc.)
+                result = await self.db[collection].update_one(filter_dict, update_dict)
+            else:
+                # Wrap in $set for regular field updates
+                result = await self.db[collection].update_one(filter_dict, {"$set": update_dict})
             return result.modified_count > 0
         except Exception as e:
             logger.error(f"Error updating document in {collection}: {e}")

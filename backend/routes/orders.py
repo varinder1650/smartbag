@@ -5,7 +5,7 @@ import logging
 from bson import ObjectId
 from datetime import datetime
 
-from models.order import OrderCreate, OrderUpdate, OrderResponse, OrderInDB
+from models.order import OrderCreate, OrderUpdate, OrderResponse, OrderResponseEnhanced, OrderInDB
 from utils.database import DatabaseManager, get_database
 from utils.auth import get_current_active_user
 from models.user import UserInDB
@@ -86,7 +86,10 @@ async def create_order(
             "changed_at": datetime.utcnow(),
             "changed_by": current_user.name or "Customer"
         }]
-        
+        # Ensure created_at and updated_at are set
+        now = datetime.utcnow()
+        order_dict["created_at"] = order_dict.get("created_at", now)
+        order_dict["updated_at"] = order_dict.get("updated_at", now)
         order_id = await db.insert_one("orders", order_dict)
         logger.info(f"Order created successfully with ID: {order_id}")
         
@@ -276,32 +279,81 @@ async def get_orders(
                 sort=[("created_at", -1)]
             )
         
-        # Enhance orders with user information
+        # Enhance orders with user information and product details
         enhanced_orders = []
         for order in orders:
             # Fetch user information - convert string user ID back to ObjectId for lookup
             user_id = order["user"]
             if isinstance(user_id, str):
                 user_id = ObjectId(user_id)
-            
             user = await db.find_one("users", {"_id": user_id})
-            
             if user:
-                # Add user information to order
                 order["user_info"] = {
                     "name": user.get("name", "Unknown"),
                     "email": user.get("email", "N/A"),
                     "phone": user.get("phone", "N/A")
                 }
             else:
-                # Fallback if user not found
                 order["user_info"] = {
                     "name": "Unknown User",
                     "email": "N/A",
                     "phone": "N/A"
                 }
+            # Fetch delivery partner info if present
+            partner_id = order.get("delivery_partner")
+            if partner_id:
+                if isinstance(partner_id, str):
+                    try:
+                        partner_id_obj = ObjectId(partner_id)
+                    except Exception:
+                        partner_id_obj = None
+                else:
+                    partner_id_obj = partner_id
+                if partner_id_obj:
+                    partner = await db.find_one("users", {"_id": partner_id_obj})
+                    if partner:
+                        order["delivery_partner_info"] = {
+                            "name": partner.get("name", "Unknown"),
+                            "email": partner.get("email", "N/A"),
+                            "phone": partner.get("phone", "N/A")
+                        }
+            # Populate product details for each item
+            for item in order.get("items", []):
+                product_id = item.get("product")
+                if product_id:
+                    try:
+                        product_obj_id = ObjectId(product_id) if isinstance(product_id, str) else product_id
+                        product = await db.find_one("products", {"_id": product_obj_id})
+                        if product:
+                            # Fetch brand information
+                            brand_name = "Unknown"
+                            if product.get("brand"):
+                                try:
+                                    brand_obj_id = ObjectId(product["brand"]) if isinstance(product["brand"], str) else product["brand"]
+                                    brand = await db.find_one("brands", {"_id": brand_obj_id})
+                                    if brand:
+                                        brand_name = brand.get("name", "Unknown")
+                                except Exception:
+                                    brand_name = "Unknown"
+                            
+                            item["product"] = {
+                                "_id": str(product["_id"]),
+                                "name": product.get("name", "Unknown"),
+                                "price": product.get("price", 0),
+                                "images": product.get("images", []),
+                                "brand": {"name": brand_name}
+                            }
+                    except Exception as e:
+                        logger.error(f"Error populating product details: {e}")
+                        # Set default product structure if lookup fails
+                        item["product"] = {
+                            "_id": str(product_id),
+                            "name": "Product not available",
+                            "price": item.get("price", 0),
+                            "images": [],
+                            "brand": {"name": "Unknown"}
+                        }
             enhanced_orders.append(order)
-        
         return [OrderResponse(**order) for order in enhanced_orders]
         
     except Exception as e:
@@ -311,7 +363,7 @@ async def get_orders(
             detail="Failed to get orders"
         )
 
-@router.get("/my", response_model=List[OrderResponse])
+@router.get("/my", response_model=List[OrderResponseEnhanced])
 async def get_my_orders(
     current_user: UserInDB = Depends(get_current_active_user),
     db: DatabaseManager = Depends(get_database)
@@ -324,7 +376,67 @@ async def get_my_orders(
             sort=[("created_at", -1)]
         )
         
-        return [OrderResponse(**order) for order in orders]
+        # Enhance orders with user information and product details
+        enhanced_orders = []
+        for order in orders:
+            # Fetch user information
+            user_id = order["user"]
+            if isinstance(user_id, str):
+                user_id = ObjectId(user_id)
+            user = await db.find_one("users", {"_id": user_id})
+            if user:
+                order["user_info"] = {
+                    "name": user.get("name", "Unknown"),
+                    "email": user.get("email", "N/A"),
+                    "phone": user.get("phone", "N/A")
+                }
+            else:
+                order["user_info"] = {
+                    "name": "Unknown User",
+                    "email": "N/A",
+                    "phone": "N/A"
+                }
+            
+            # Populate product details for each item
+            for item in order.get("items", []):
+                product_id = item.get("product")
+                if product_id:
+                    try:
+                        product_obj_id = ObjectId(product_id) if isinstance(product_id, str) else product_id
+                        product = await db.find_one("products", {"_id": product_obj_id})
+                        if product:
+                            # Fetch brand information
+                            brand_name = "Unknown"
+                            if product.get("brand"):
+                                try:
+                                    brand_obj_id = ObjectId(product["brand"]) if isinstance(product["brand"], str) else product["brand"]
+                                    brand = await db.find_one("brands", {"_id": brand_obj_id})
+                                    if brand:
+                                        brand_name = brand.get("name", "Unknown")
+                                except Exception:
+                                    brand_name = "Unknown"
+                            
+                            item["product"] = {
+                                "_id": str(product["_id"]),
+                                "name": product.get("name", "Unknown"),
+                                "price": product.get("price", 0),
+                                "images": product.get("images", []),
+                                "brand": {"name": brand_name}
+                            }
+                    except Exception as e:
+                        logger.error(f"Error populating product details: {e}")
+                        # Set default product structure if lookup fails
+                        item["product"] = {
+                            "_id": str(product_id),
+                            "name": "Product not available",
+                            "price": item.get("price", 0),
+                            "images": [],
+                            "brand": {"name": "Unknown"}
+                        }
+            
+            enhanced_orders.append(order)
+        
+        return [OrderResponseEnhanced(**order) for order in enhanced_orders]
         
     except Exception as e:
         logger.error(f"Get my orders error: {e}")
@@ -346,21 +458,65 @@ async def get_order(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid order ID"
             )
-        
         order = await db.find_one("orders", {"_id": ObjectId(order_id)})
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
-        # Check if user can access this order
         if current_user.role != "admin" and order["user"] != ObjectId(current_user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this order"
             )
-        
+        # Populate user_info
+        user_id = order["user"]
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)
+        user = await db.find_one("users", {"_id": user_id})
+        if user:
+            order["user_info"] = {
+                "name": user.get("name", "Unknown"),
+                "email": user.get("email", "N/A"),
+                "phone": user.get("phone", "N/A")
+            }
+        else:
+            order["user_info"] = {
+                "name": "Unknown User",
+                "email": "N/A",
+                "phone": "N/A"
+            }
+        # Populate delivery_partner_info
+        partner_id = order.get("delivery_partner")
+        if partner_id:
+            if isinstance(partner_id, str):
+                try:
+                    partner_id_obj = ObjectId(partner_id)
+                except Exception:
+                    partner_id_obj = None
+            else:
+                partner_id_obj = partner_id
+            if partner_id_obj:
+                partner = await db.find_one("users", {"_id": partner_id_obj})
+                if partner:
+                    order["delivery_partner_info"] = {
+                        "name": partner.get("name", "Unknown"),
+                        "email": partner.get("email", "N/A"),
+                        "phone": partner.get("phone", "N/A")
+                    }
+        # Populate product details for each item
+        for item in order.get("items", []):
+            product_id = item.get("product")
+            if product_id:
+                try:
+                    product_obj_id = ObjectId(product_id) if isinstance(product_id, str) else product_id
+                    product = await db.find_one("products", {"_id": product_obj_id})
+                    if product:
+                        item["product_id"] = str(product["_id"])
+                        item["product_name"] = product.get("name", "Unknown")
+                        item["product_price"] = product.get("price", 0)
+                except Exception:
+                    pass
         return OrderResponse(**order)
         
     except HTTPException:
@@ -379,64 +535,89 @@ async def update_order_status(
     current_user: UserInDB = Depends(get_current_active_user),
     db: DatabaseManager = Depends(get_database)
 ):
-    """Update order status (admin only)"""
+    """Update order status (admin only) and assign delivery partner if provided"""
     try:
-        # Check if user is admin
         if current_user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized"
             )
-        
         if not ObjectId.is_valid(order_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid order ID"
             )
-        
-        # Check if order exists
         order = await db.find_one("orders", {"_id": ObjectId(order_id)})
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
-        # Update order status
         new_status = status_update.get("status")
         if not new_status:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Status is required"
             )
-        
         # Add status change to history
         status_change = {
             "status": new_status,
             "changed_at": datetime.utcnow(),
             "changed_by": current_user.name or "Admin"
         }
-        
         order["status_change_history"].append(status_change)
-        
-        # Update order
+        update_dict = {
+            "order_status": new_status,
+            "status_change_history": order["status_change_history"]
+        }
+        # Assign delivery partner if provided
+        if "delivery_partner" in status_update:
+            update_dict["delivery_partner"] = status_update["delivery_partner"]
         success = await db.update_one(
             "orders",
             {"_id": ObjectId(order_id)},
-            {
-                "order_status": new_status,
-                "status_change_history": order["status_change_history"]
-            }
+            update_dict
         )
-        
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update order status"
             )
-        
-        # Get updated order
         updated_order = await db.find_one("orders", {"_id": ObjectId(order_id)})
+        # Populate user_info and delivery_partner_info
+        user_id = updated_order["user"]
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)
+        user = await db.find_one("users", {"_id": user_id})
+        if user:
+            updated_order["user_info"] = {
+                "name": user.get("name", "Unknown"),
+                "email": user.get("email", "N/A"),
+                "phone": user.get("phone", "N/A")
+            }
+        else:
+            updated_order["user_info"] = {
+                "name": "Unknown User",
+                "email": "N/A",
+                "phone": "N/A"
+            }
+        partner_id = updated_order.get("delivery_partner")
+        if partner_id:
+            if isinstance(partner_id, str):
+                try:
+                    partner_id_obj = ObjectId(partner_id)
+                except Exception:
+                    partner_id_obj = None
+            else:
+                partner_id_obj = partner_id
+            if partner_id_obj:
+                partner = await db.find_one("users", {"_id": partner_id_obj})
+                if partner:
+                    updated_order["delivery_partner_info"] = {
+                        "name": partner.get("name", "Unknown"),
+                        "email": partner.get("email", "N/A"),
+                        "phone": partner.get("phone", "N/A")
+                    }
         return OrderResponse(**updated_order)
         
     except HTTPException:
@@ -446,4 +627,47 @@ async def update_order_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update order status"
+        ) 
+
+@router.delete("/{order_id}")
+async def delete_order(
+    order_id: str,
+    current_user: UserInDB = Depends(get_current_active_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    """Delete an order (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized"
+            )
+        if not ObjectId.is_valid(order_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid order ID"
+            )
+        # Check if order exists
+        existing_order = await db.find_one("orders", {"_id": ObjectId(order_id)})
+        if not existing_order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
+        # Delete order
+        success = await db.delete_one("orders", {"_id": ObjectId(order_id)})
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete order"
+            )
+        return {"message": "Order deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete order error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete order"
         ) 

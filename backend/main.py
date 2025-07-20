@@ -37,7 +37,7 @@ db = client.blinkit_clone
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Starting up FastAPI application...")
+    logger.info("Starting up the backend server...")
     try:
         # Test MongoDB connection
         await client.admin.command('ping')
@@ -49,13 +49,13 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    logger.info("Shutting down FastAPI application...")
+    logger.info("Shutting down backend server...")
     client.close()
 
 # Create FastAPI app
 app = FastAPI(
-    title="Blinkit Clone API",
-    description="FastAPI backend for Blinkit Clone application",
+    title="SmartBag",
+    description="Quick Commerce Application(SmartBag)",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -111,7 +111,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 # Root route
 @app.get("/")
 async def root():
-    return {"message": "API is running..."}
+    return {"message": "Backend is running..."}
 
 # Health check route
 @app.get("/api/health")
@@ -155,10 +155,18 @@ async def not_found_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 3001))
+    environment = os.getenv("ENVIRONMENT", "development")
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=True,
-        log_level="info"
-    ) 
+        reload=environment == "development",
+        log_level="info",
+        access_log=True,
+        # SCALABILITY: Production server settings
+        workers=1 if environment == "development" else 4,
+        loop="asyncio",
+        http="httptools",
+        lifespan="on"
+    )

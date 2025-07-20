@@ -1,8 +1,8 @@
 @echo off
 
-REM Blinkit Clone - FastAPI Backend Startup Script (Windows)
+REM SmartBag - FastAPI Backend Startup Script (Windows)
 
-echo 🚀 Starting Blinkit Clone FastAPI Backend...
+echo 🚀 Starting SmartBag Backend...
 
 REM Check if virtual environment exists
 if not exist "venv" (
@@ -37,13 +37,13 @@ REM Create uploads directory if it doesn't exist
 if not exist "uploads" mkdir uploads
 
 REM Start the server
-echo 🌐 Starting FastAPI server on http://localhost:3001
-echo 📚 API Documentation will be available at http://localhost:3001/docs
-echo 🔍 ReDoc Documentation will be available at http://localhost:3001/redoc
-echo.
-echo Press Ctrl+C to stop the server
-echo.
+REM echo 🌐 Starting FastAPI server on http://localhost:3001
+REM echo 📚 API Documentation will be available at http://localhost:3001/docs
+REM echo 🔍 ReDoc Documentation will be available at http://localhost:3001/redoc
+REM echo.
+REM echo Press Ctrl+C to stop the server
+REM echo.
 
-python main.py
+uvicorn main:app --host 0.0.0.0 --port 3001 --reload
 
 pause 

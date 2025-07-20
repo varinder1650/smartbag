@@ -37,11 +37,11 @@ fi
 mkdir -p uploads
 
 # Start the server
-echo "🌐 Starting FastAPI server on http://localhost:3001"
-echo "📚 API Documentation will be available at http://localhost:3001/docs"
-echo "🔍 ReDoc Documentation will be available at http://localhost:3001/redoc"
-echo ""
-echo "Press Ctrl+C to stop the server"
-echo ""
+# echo "🌐 Starting FastAPI server on http://localhost:3001"
+# echo "📚 API Documentation will be available at http://localhost:3001/docs"
+# echo "🔍 ReDoc Documentation will be available at http://localhost:3001/redoc"
+# echo ""
+# echo "Press Ctrl+C to stop the server"
+# echo ""
 
-python main.py 
+uvicorn main:app --host 0.0.0.0 --port 3001 --reload 
