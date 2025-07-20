@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 // Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.108:3001/api';
+const API_BASE_URL = 'http://10.0.0.74:3001/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,39 +38,43 @@ const CartScreen = () => {
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    if (token) {
-      fetchCart();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
+    fetchCart();
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
-      if (token) {
-        fetchCart();
-      }
-    }, [token])
+      fetchCart();
+    }, [])
   );
 
   const fetchCart = async () => {
     try {
       console.log('=== FETCH CART DEBUG ===');
-      console.log('Token:', token);
+      console.log('Token being sent:', token);
+      if (!token) {
+        // Use public cart endpoint for non-authenticated users
+        const timestamp = Date.now();
+        const response = await fetch(`${API_BASE_URL}/cart/public?_t=${timestamp}`);
+        const data = await response.json();
+        console.log('Public cart response:', data);
+        setCartItems(data.items || []);
+        setLoading(false);
+        return;
+      }
+      // Print first 20 chars of token for debugging
+      console.log('Token (first 20 chars):', token ? token.substring(0, 20) : 'null');
       const timestamp = Date.now();
-      const response = await fetch(`${API_BASE_URL}/cart?_t=${timestamp}`, {
+      const response = await fetch(`${API_BASE_URL}/cart/?_t=${timestamp}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-
       const data = await response.json();
       console.log('Cart fetch response:', data);
-
       if (response.ok) {
         setCartItems(data.items || []);
       } else {
-        console.error('Failed to fetch cart');
+        console.error('Failed to fetch cart. Status:', response.status, 'Token:', token);
       }
     } catch (error) {
       console.error('Error fetching cart:', error);
@@ -93,10 +97,8 @@ const CartScreen = () => {
         const response = await fetch(`${API_BASE_URL}/cart/remove`, {
           method: 'DELETE',
           headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({ itemId }),
         });
 
         if (response.ok) {
@@ -183,10 +185,17 @@ const CartScreen = () => {
   };
 
   const renderCartItem = ({ item }: { item: CartItem }) => {
-    const imageUrl = item.product.images && item.product.images.length > 0 
-      ? `${API_BASE_URL.replace('/api', '')}${item.product.images[0]}?_t=${Date.now()}`
-      : 'https://via.placeholder.com/150';
-    
+    let imageUrl = '';
+    if (item.product.images && item.product.images.length > 0) {
+      if (typeof item.product.images[0] === 'string' && item.product.images[0].startsWith('http')) {
+        imageUrl = item.product.images[0];
+      } else if (typeof item.product.images[0] === 'string' && item.product.images[0].trim() !== '') {
+        imageUrl = `${API_BASE_URL.replace('/api', '')}${item.product.images[0]}?_t=${Date.now()}`;
+      }
+    }
+    if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '') {
+      imageUrl = 'https://via.placeholder.com/150';
+    }
     return (
       <View style={styles.cartItem}>
         <Image
@@ -252,11 +261,15 @@ const CartScreen = () => {
   if (!token) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Shopping Cart</Text>
+          <Text style={styles.itemCount}>0 items</Text>
+        </View>
         <View style={styles.emptyContainer}>
-          <Ionicons name="lock-closed-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyTitle}>Login Required</Text>
+          <Ionicons name="cart-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>
-            Please login to view your cart
+            Login to save your cart and track orders
           </Text>
           <TouchableOpacity 
             style={styles.shopNowButton}

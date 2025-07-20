@@ -16,6 +16,7 @@ import Orders from './components/Orders';
 import Users from './components/Users';
 import Settings from './components/Settings';
 import ErrorBoundary from './components/ErrorBoundary';
+import Debug from './components/Debug';
 
 // Services
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -32,7 +33,10 @@ const theme = createTheme({
 });
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) {
+    return <div style={{textAlign: 'center', marginTop: '20vh', fontSize: 24}}>Loading...</div>;
+  }
   return isAuthenticated ? children : <Navigate to="/login" />;
 };
 
@@ -60,6 +64,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/debug" element={<Debug />} />
             <Route
               path="/"
               element={
@@ -137,6 +142,18 @@ function App() {
                   <AdminLayout>
                     <ErrorBoundary>
                       <Settings />
+                    </ErrorBoundary>
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/debug"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <ErrorBoundary>
+                      <Debug />
                     </ErrorBoundary>
                   </AdminLayout>
                 </ProtectedRoute>

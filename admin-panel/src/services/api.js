@@ -2,9 +2,11 @@ import axios from 'axios';
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001/api',
+  baseURL: process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001/api',
   timeout: 10000,
 });
+
+console.log('API baseURL:', api.defaults.baseURL);
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
@@ -56,6 +58,8 @@ export const apiService = {
   // Auth
   login: (credentials) => api.post('/auth/login', credentials),
   getUsers: () => api.get('/auth/users'),
+  createUser: (userData) => api.post('/auth/users', userData),
+  updateUser: (id, userData) => api.put(`/auth/users/${id}`, userData),
 
   // Products
   getProducts: (params = {}) => {
@@ -90,7 +94,8 @@ export const apiService = {
     const timestamp = Date.now();
     return api.get(`/orders?_t=${timestamp}`, { params });
   },
-  updateOrderStatus: (id, status) => api.put(`/orders/${id}/status`, { status }),
+  updateOrderStatus: (id, status, delivery_partner) => api.put(`/orders/${id}/status`, { status, ...(delivery_partner && { delivery_partner }) }),
+  deleteOrder: (id) => api.delete(`/orders/${id}`),
 
   // Settings
   getSettings: () => api.get('/settings'),
@@ -112,6 +117,9 @@ export const extractData = (response) => {
 // Helper function to handle API errors
 export const handleApiError = (error) => {
   console.error('API Error:', error);
+  console.error('Error Response:', error.response?.data);
+  console.error('Error Status:', error.response?.status);
+  console.error('Error Headers:', error.response?.headers);
   
   if (error.response) {
     // Server responded with error status

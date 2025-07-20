@@ -11,8 +11,14 @@ export const API_CONFIG = {
     'http://localhost:3001/api'
   ],
   
-  // Alternative: Use environment variable if available
-  // BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://10.0.0.74:3001/api',
+  // Environment variable for API URL (for production)
+  ENV_URL: process.env.EXPO_PUBLIC_API_URL,
+  
+  // Ola Krutrim Maps API configuration
+  KRUTRIM_MAPS: {
+    API_KEY: process.env.EXPO_PUBLIC_OLA_KRUTRIM_API_KEY,
+    BASE_URL: 'https://api.krutrim.ai/v1/maps'
+  }
 };
 
 export const API_ENDPOINTS = {

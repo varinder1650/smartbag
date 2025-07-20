@@ -53,6 +53,7 @@ const Products = () => {
     stock: '',
     category: '',
     brand: '',
+    keywords: '',
   });
   const [imageFiles, setImageFiles] = useState([]);
   const [existingImages, setExistingImages] = useState([]);
@@ -134,6 +135,7 @@ const Products = () => {
       stock: '',
       category: '',
       brand: '',
+      keywords: '',
     });
     setImageFiles([]);
     setExistingImages([]);
@@ -151,6 +153,7 @@ const Products = () => {
       stock: product.stock?.toString() || '',
       category: product.category?._id || product.category || '',
       brand: product.brand?._id || product.brand || '',
+      keywords: Array.isArray(product.keywords) ? product.keywords.join(', ') : '',
     });
     setImageFiles([]);
     setExistingImages(Array.isArray(product.images) ? product.images : []);
@@ -193,6 +196,7 @@ const Products = () => {
       productData.append('stock', formData.stock);
       productData.append('category', formData.category);
       productData.append('brand', formData.brand);
+      productData.append('keywords', formData.keywords);
       
       // Append new files
       imageFiles.forEach((file) => {
@@ -203,6 +207,12 @@ const Products = () => {
       existingImages.forEach((image) => {
         productData.append('existingImages', image);
       });
+
+      // Debug: Log FormData contents
+      console.log("FormData contents:");
+      for (let pair of productData.entries()) {
+        console.log(pair[0] + ':', pair[1]);
+      }
 
       if (editingProduct) {
         await apiService.updateProduct(editingProduct._id, productData);
@@ -385,120 +395,148 @@ const Products = () => {
         </DialogTitle>
         
         <DialogContent sx={{ p: 4, maxHeight: 'calc(90vh - 140px)', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
-          <Grid container spacing={3} direction="column" sx={{ mt: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
             {/* Product Name */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Product Name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                variant="outlined"
-                sx={{ 
-                  '& .MuiOutlinedInput-root': { 
-                    borderRadius: 2,
-                    backgroundColor: 'white',
-                    '&:hover': {
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
+            <TextField
+              fullWidth
+              label="Product Name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { 
+                  borderRadius: 2,
+                  backgroundColor: 'white',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea'
                     }
-                  },
-                  '& .MuiInputLabel-root': {
-                    fontWeight: 500
                   }
-                }}
-              />
-            </Grid>
+                },
+                '& .MuiInputLabel-root': {
+                  fontWeight: 500
+                }
+              }}
+            />
             {/* Price */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Price"
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                required
-                variant="outlined"
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+            <TextField
+              fullWidth
+              label="Price"
+              type="number"
+              value={formData.price}
+              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+              required
+              variant="outlined"
+                              InputProps={{
+                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                 }}
-                sx={{ 
-                  '& .MuiOutlinedInput-root': { 
-                    borderRadius: 2,
-                    backgroundColor: 'white',
-                    '&:hover': {
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
+              sx={{ 
+                '& .MuiOutlinedInput-root': { 
+                  borderRadius: 2,
+                  backgroundColor: 'white',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea'
                     }
-                  },
-                  '& .MuiInputLabel-root': {
-                    fontWeight: 500
                   }
-                }}
-              />
-            </Grid>
+                },
+                '& .MuiInputLabel-root': {
+                  fontWeight: 500
+                }
+              }}
+            />
             {/* Stock Quantity */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Stock Quantity"
-                type="number"
-                value={formData.stock}
-                onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                required
-                variant="outlined"
-                sx={{ 
-                  '& .MuiOutlinedInput-root': { 
-                    borderRadius: 2,
-                    backgroundColor: 'white',
-                    '&:hover': {
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
+            <TextField
+              fullWidth
+              label="Stock Quantity"
+              type="number"
+              value={formData.stock}
+              onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+              required
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { 
+                  borderRadius: 2,
+                  backgroundColor: 'white',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea'
                     }
-                  },
-                  '& .MuiInputLabel-root': {
-                    fontWeight: 500
                   }
-                }}
-              />
-            </Grid>
+                },
+                '& .MuiInputLabel-root': {
+                  fontWeight: 500
+                }
+              }}
+            />
             {/* Category */}
-            <Grid item xs={12}>
-              <FormControl fullWidth required variant="outlined" sx={{ 
-                '& .MuiOutlinedInput-root': { 
-                  borderRadius: 2,
-                  backgroundColor: 'white',
-                  '&:hover': {
-                    '& .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#667eea'
-                    }
+            <FormControl fullWidth required variant="outlined" sx={{ 
+              '& .MuiOutlinedInput-root': { 
+                borderRadius: 2,
+                backgroundColor: 'white',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#667eea'
                   }
-                },
-                '& .MuiInputLabel-root': {
-                  fontWeight: 500
                 }
-              }}>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  label="Category"
-                >
-                  {categories.map((category) => (
-                    <MenuItem key={category._id} value={category._id}>
-                      {category.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+              },
+              '& .MuiInputLabel-root': {
+                fontWeight: 500
+              }
+            }}>
+              <InputLabel>Category</InputLabel>
+              <Select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                label="Category"
+              >
+                {categories.map((category) => (
+                  <MenuItem key={category._id} value={category._id}>
+                    {category.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             {/* Brand */}
-            <Grid item xs={12}>
-              <FormControl fullWidth required variant="outlined" sx={{ 
+            <FormControl fullWidth required variant="outlined" sx={{ 
+              '& .MuiOutlinedInput-root': { 
+                borderRadius: 2,
+                backgroundColor: 'white',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#667eea'
+                  }
+                }
+              },
+              '& .MuiInputLabel-root': {
+                fontWeight: 500
+              }
+            }}>
+              <InputLabel>Brand</InputLabel>
+              <Select
+                value={formData.brand}
+                onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                label="Brand"
+              >
+                {brands.map((brand) => (
+                  <MenuItem key={brand._id} value={brand._id}>
+                    {brand.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* Product Description */}
+            <TextField
+              fullWidth
+              label="Product Description"
+              multiline
+              rows={4}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              required
+              variant="outlined"
+              sx={{ 
                 '& .MuiOutlinedInput-root': { 
                   borderRadius: 2,
                   backgroundColor: 'white',
@@ -511,238 +549,199 @@ const Products = () => {
                 '& .MuiInputLabel-root': {
                   fontWeight: 500
                 }
-              }}>
-                <InputLabel>Brand</InputLabel>
-                <Select
-                  value={formData.brand}
-                  onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                  label="Brand"
-                >
-                  {brands.map((brand) => (
-                    <MenuItem key={brand._id} value={brand._id}>
-                      {brand.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            {/* Product Description */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Product Description"
-                multiline
-                rows={4}
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                required
-                variant="outlined"
-                sx={{ 
-                  '& .MuiOutlinedInput-root': { 
-                    borderRadius: 2,
-                    backgroundColor: 'white',
-                    '&:hover': {
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
+              }}
+            />
+            {/* Keywords */}
+            <TextField
+              fullWidth
+              label="Keywords (comma-separated)"
+              placeholder="e.g., phone, smartphone, mobile, camera, gaming"
+              value={formData.keywords}
+              onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
+              variant="outlined"
+              helperText="Enter keywords separated by commas to help customers find this product"
+              sx={{ 
+                '& .MuiOutlinedInput-root': { 
+                  borderRadius: 2,
+                  backgroundColor: 'white',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea'
                     }
-                  },
-                  '& .MuiInputLabel-root': {
-                    fontWeight: 500
                   }
-                }}
-              />
-            </Grid>
-            {/* Images Section: always full width */}
-            <Grid item xs={12}>
-              <Box sx={{ 
-                p: 3, 
-                backgroundColor: 'white', 
-                borderRadius: 2, 
-                border: '1px solid #e0e0e0',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-              }}>
-                <Typography variant="h6" sx={{ 
-                  mb: 3, 
-                  fontWeight: 700, 
-                  color: 'text.primary',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1
-                }}>
-                  <ImageIcon color="primary" />
+                },
+                '& .MuiInputLabel-root': {
+                  fontWeight: 500
+                }
+              }}
+            />
+            {/* Images Section */}
+            <Box sx={{ 
+              p: 3, 
+              border: '2px dashed #e0e0e0', 
+              borderRadius: 3, 
+              backgroundColor: 'white',
+              textAlign: 'center',
+              transition: 'all 0.2s ease-in-out',
+              '&:hover': {
+                borderColor: '#667eea',
+                backgroundColor: '#f8f9ff'
+              }
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                <ImageIcon sx={{ fontSize: 32, color: '#667eea', mr: 1 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
                   Product Images
                 </Typography>
-                {/* Existing Images */}
-                {existingImages.length > 0 && (
-                  <Box sx={{ mb: 4 }}>
-                    <Typography variant="subtitle1" sx={{ 
-                      mb: 2, 
-                      fontWeight: 600, 
-                      color: 'text.secondary',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1
-                    }}>
-                      <InfoIcon fontSize="small" />
-                      Current Images ({existingImages.length})
-                    </Typography>
-                    <Grid container spacing={2}>
-                      {existingImages.map((image, index) => {
-                        let imageUrl;
-                        if (image.startsWith('/uploads/')) {
-                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.108:3001'}${image}?_t=${Date.now()}`;
-                        } else {
-                          imageUrl = `${process.env.REACT_APP_API_URL || 'http://10.0.0.108:3001'}/uploads/${image}?_t=${Date.now()}`;
-                        }
-                        return (
-                          <Grid item key={index}>
-                            <Card 
-                              sx={{ 
-                                width: 120, 
-                                position: 'relative',
-                                borderRadius: 2,
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                transition: 'transform 0.2s ease-in-out',
-                                '&:hover': {
-                                  transform: 'translateY(-2px)',
-                                  boxShadow: '0 6px 20px rgba(0,0,0,0.15)'
-                                }
-                              }}
-                            >
-                              <CardMedia
-                                component="img"
-                                height="120"
-                                image={imageUrl}
-                                alt={`Image ${index + 1}`}
-                                sx={{ objectFit: 'cover' }}
-                                onError={(e) => {
-                                  console.error('Image failed to load in dialog:', imageUrl);
-                                  e.target.style.display = 'none';
-                                }}
-                              />
-                              <IconButton
-                                size="small"
-                                sx={{ 
-                                  position: 'absolute', 
-                                  top: 4, 
-                                  right: 4, 
-                                  bgcolor: 'rgba(255,255,255,0.95)',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                  '&:hover': { 
-                                    bgcolor: 'rgba(255,255,255,1)',
-                                    transform: 'scale(1.1)'
-                                  },
-                                  transition: 'all 0.2s ease-in-out'
-                                }}
-                                onClick={() => handleRemoveExistingImage(index)}
-                              >
-                                <DeleteImageIcon fontSize="small" color="error" />
-                              </IconButton>
-                            </Card>
-                          </Grid>
-                        );
-                      })}
-                    </Grid>
-                  </Box>
-                )}
-                {/* New Images */}
-                {imageFiles.length > 0 && (
-                  <Box sx={{ mb: 4 }}>
-                    <Typography variant="subtitle1" sx={{ 
-                      mb: 2, 
-                      fontWeight: 600, 
-                      color: 'text.secondary',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1
-                    }}>
-                      <CloudUploadIcon fontSize="small" />
-                      New Images ({imageFiles.length})
-                    </Typography>
-                    <Grid container spacing={2}>
-                      {imageFiles.map((file, index) => (
-                        <Grid item key={index}>
+              </Box>
+              
+              {/* Existing Images */}
+              {existingImages.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#555' }}>
+                    Current Images ({existingImages.length})
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {existingImages.map((image, index) => {
+                      let imageUrl;
+                      if (image.startsWith('http')) {
+                        imageUrl = image;
+                      } else {
+                        const backendBase = process.env.REACT_APP_API_URL || 'http://10.0.0.108:3001';
+                        imageUrl = `${backendBase}${image}?_t=${Date.now()}`;
+                      }
+                      return (
+                        <Grid item xs={1} key={index}>
                           <Card 
                             sx={{ 
-                              width: 120, 
                               position: 'relative',
                               borderRadius: 2,
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                              transition: 'transform 0.2s ease-in-out',
+                              overflow: 'hidden',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                              transition: 'all 0.2s ease-in-out',
                               '&:hover': {
-                                transform: 'translateY(-2px)',
-                                boxShadow: '0 6px 20px rgba(0,0,0,0.15)'
+                                transform: 'scale(1.05)',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.15)'
                               }
                             }}
                           >
                             <CardMedia
                               component="img"
-                              height="120"
-                              image={URL.createObjectURL(file)}
-                              alt={`New Image ${index + 1}`}
+                              height="80"
+                              image={imageUrl}
+                              alt={`Product ${index + 1}`}
                               sx={{ objectFit: 'cover' }}
                             />
                             <IconButton
                               size="small"
-                              sx={{ 
-                                position: 'absolute', 
-                                top: 4, 
-                                right: 4, 
-                                bgcolor: 'rgba(255,255,255,0.95)',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                '&:hover': { 
-                                  bgcolor: 'rgba(255,255,255,1)',
-                                  transform: 'scale(1.1)'
-                                },
-                                transition: 'all 0.2s ease-in-out'
+                              onClick={() => handleRemoveExistingImage(index)}
+                              sx={{
+                                position: 'absolute',
+                                top: 4,
+                                right: 4,
+                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                '&:hover': {
+                                  backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                                  color: 'red'
+                                }
                               }}
-                              onClick={() => handleRemoveImage(index)}
                             >
-                              <DeleteImageIcon fontSize="small" color="error" />
+                              <DeleteImageIcon fontSize="small" />
                             </IconButton>
                           </Card>
                         </Grid>
-                      ))}
-                    </Grid>
-                  </Box>
-                )}
-                {/* Upload Button */}
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<CloudUploadIcon />}
-                  sx={{ 
-                    mt: 2,
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '1rem',
-                    py: 1.5,
-                    px: 3,
-                    borderColor: '#667eea',
-                    color: '#667eea',
-                    '&:hover': {
-                      borderColor: '#5a6fd8',
-                      backgroundColor: 'rgba(102, 126, 234, 0.04)',
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 12px rgba(102, 126, 234, 0.2)'
-                    },
-                    transition: 'all 0.2s ease-in-out'
-                  }}
-                >
-                  Upload Images
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    style={{ display: 'none' }}
-                  />
-                </Button>
-              </Box>
-            </Grid>
-          </Grid>
+                      );
+                    })}
+                  </Grid>
+                </Box>
+              )}
+              
+              {/* New Images */}
+              {imageFiles.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#555' }}>
+                    New Images ({imageFiles.length})
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {imageFiles.map((file, index) => (
+                      <Grid item xs={1} key={index}>
+                        <Card 
+                          sx={{ 
+                            position: 'relative',
+                            borderRadius: 2,
+                            overflow: 'hidden',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            transition: 'all 0.2s ease-in-out',
+                            '&:hover': {
+                              transform: 'scale(1.05)',
+                              boxShadow: '0 4px 16px rgba(0,0,0,0.15)'
+                            }
+                          }}
+                        >
+                          <CardMedia
+                            component="img"
+                            height="80"
+                            image={URL.createObjectURL(file)}
+                            alt={`New ${index + 1}`}
+                            sx={{ objectFit: 'cover' }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRemoveImage(index)}
+                            sx={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                                color: 'red'
+                              }
+                            }}
+                          >
+                            <DeleteImageIcon fontSize="small" />
+                          </IconButton>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
+              
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<CloudUploadIcon />}
+                sx={{ 
+                  mt: 2,
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  py: 1.5,
+                  px: 3,
+                  borderColor: '#667eea',
+                  color: '#667eea',
+                  '&:hover': {
+                    borderColor: '#5a6fd8',
+                    backgroundColor: 'rgba(102, 126, 234, 0.04)',
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.2)'
+                  },
+                  transition: 'all 0.2s ease-in-out'
+                }}
+              >
+                Upload Images
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: 'none' }}
+                />
+              </Button>
+            </Box>
+          </Box>
         </DialogContent>
         
         <DialogActions sx={{ 

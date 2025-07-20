@@ -10,12 +10,14 @@ import {
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
+import { reverseGeocode } from '../services/api';
 
 const AddressMapPicker = ({ onAddressSelect, initialLocation = null }) => {
   const [location, setLocation] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(initialLocation);
   const [loading, setLoading] = useState(true);
   const [address, setAddress] = useState('');
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -60,50 +62,139 @@ const AddressMapPicker = ({ onAddressSelect, initialLocation = null }) => {
 
   const getAddressFromCoordinates = async (latitude, longitude) => {
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=AIzaSyDyo33LbdlGo1vNxEMUQSS9W5EMNxYFJ14`
-      );
-      const data = await response.json();
+      setReverseGeocoding(true);
       
-      if (data.results && data.results.length > 0) {
-        const addressComponents = data.results[0].address_components;
-        const formattedAddress = data.results[0].formatted_address;
-        setAddress(formattedAddress);
+      // First try backend API for reverse geocoding
+      let backendSuccess = false;
+      try {
+        console.log('Trying backend reverse geocoding for:', latitude, longitude);
+        const data = await reverseGeocode(latitude, longitude);
         
-        // Extract address components
-        const streetNumber = addressComponents.find(component => 
-          component.types.includes('street_number')
-        )?.long_name || '';
+        console.log('Backend response data:', data);
         
-        const route = addressComponents.find(component => 
-          component.types.includes('route')
-        )?.long_name || '';
+        if (data.formattedAddress) {
+          setAddress(data.formattedAddress);
+          
+          // Extract address components from the response
+          const addressComponents = data.addressComponents || {};
+          
+          const addressData = {
+            address: addressComponents.street || '',
+            city: addressComponents.city || '',
+            pincode: addressComponents.pincode || '',
+            country: addressComponents.country || 'India',
+            fullAddress: data.formattedAddress,
+            coordinates: { latitude, longitude }
+          };
+          
+          onAddressSelect(addressData);
+          backendSuccess = true;
+          console.log('Backend reverse geocoding successful');
+          return; // Success, exit early
+        }
+      } catch (backendError) {
+        console.log('Backend reverse geocoding failed with error:', backendError);
+        // Check if it's a 503 error (service unavailable)
+        if (backendError.response && backendError.response.status === 503) {
+          console.log('Backend service unavailable (503), using Expo Location fallback');
+        } else {
+          console.log('Other backend error, using Expo Location fallback');
+        }
+      }
+      
+      // If backend failed, use Expo Location fallback
+      if (!backendSuccess) {
+        console.log('Using Expo Location fallback for reverse geocoding');
         
-        const locality = addressComponents.find(component => 
-          component.types.includes('locality')
-        )?.long_name || '';
-        
-        const postalCode = addressComponents.find(component => 
-          component.types.includes('postal_code')
-        )?.long_name || '';
-        
-        const country = addressComponents.find(component => 
-          component.types.includes('country')
-        )?.long_name || '';
-        
-        const addressData = {
-          address: `${streetNumber} ${route}`.trim(),
-          city: locality,
-          pincode: postalCode,
-          country: country,
-          fullAddress: formattedAddress,
-          coordinates: { latitude, longitude }
-        };
-        
-        onAddressSelect(addressData);
+        try {
+          // Fallback: Use Expo Location for reverse geocoding
+          const addressResponse = await Location.reverseGeocodeAsync({
+            latitude: latitude,
+            longitude: longitude,
+          });
+
+          console.log('Expo Location response:', addressResponse);
+
+          if (addressResponse.length > 0) {
+            const addr = addressResponse[0];
+            const fullAddress = [
+              addr.street,
+              addr.district,
+              addr.city,
+              addr.region,
+              addr.postalCode,
+            ].filter(Boolean).join(', ');
+            
+            console.log('Expo Location address:', fullAddress);
+            setAddress(fullAddress);
+            
+            const addressData = {
+              address: addr.street || '',
+              city: addr.city || '',
+              pincode: addr.postalCode || '',
+              country: addr.country || 'India',
+              fullAddress: fullAddress,
+              coordinates: { latitude, longitude }
+            };
+            
+            onAddressSelect(addressData);
+          } else {
+            // If no address found, create a basic one from coordinates
+            const basicAddress = `Location at ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+            console.log('No address found, using coordinates:', basicAddress);
+            setAddress(basicAddress);
+            
+            const addressData = {
+              address: 'Selected Location',
+              city: 'Unknown',
+              pincode: '',
+              country: 'India',
+              fullAddress: basicAddress,
+              coordinates: { latitude, longitude }
+            };
+            
+            onAddressSelect(addressData);
+          }
+        } catch (expoError) {
+          console.log('Expo Location also failed:', expoError);
+          
+          // Last resort: create address from coordinates
+          const fallbackAddress = `Location at ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+          console.log('Using last resort fallback:', fallbackAddress);
+          setAddress(fallbackAddress);
+          
+          const addressData = {
+            address: 'Selected Location',
+            city: 'Unknown',
+            pincode: '',
+            country: 'India',
+            fullAddress: fallbackAddress,
+            coordinates: { latitude, longitude }
+          };
+          
+          onAddressSelect(addressData);
+        }
       }
     } catch (error) {
       console.error('Error getting address:', error);
+      
+      // Last resort: create address from coordinates
+      const fallbackAddress = `Location at ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      console.log('Using last resort fallback:', fallbackAddress);
+      setAddress(fallbackAddress);
+      
+      const addressData = {
+        address: 'Selected Location',
+        city: 'Unknown',
+        pincode: '',
+        country: 'India',
+        fullAddress: fallbackAddress,
+        coordinates: { latitude, longitude }
+      };
+      
+      onAddressSelect(addressData);
+    } finally {
+      setReverseGeocoding(false);
     }
   };
 
@@ -173,9 +264,15 @@ const AddressMapPicker = ({ onAddressSelect, initialLocation = null }) => {
       
       <View style={styles.addressContainer}>
         <Text style={styles.addressLabel}>Selected Address:</Text>
-        <Text style={styles.addressText}>{address || 'Tap on map to select location'}</Text>
+        <Text style={styles.addressText}>
+          {reverseGeocoding ? 'Getting address...' : (address || 'Tap on map to select location')}
+        </Text>
         
-        {selectedLocation && address && (
+        {reverseGeocoding && (
+          <ActivityIndicator size="small" color="#007AFF" style={styles.geocodingLoader} />
+        )}
+        
+        {selectedLocation && address && !reverseGeocoding && (
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmLocation}>
             <Ionicons name="checkmark-circle" size={20} color="white" />
             <Text style={styles.confirmButtonText}>Confirm Location</Text>
@@ -293,6 +390,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  geocodingLoader: {
+    marginTop: 10,
   },
 });
 

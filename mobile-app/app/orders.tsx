@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 
-const API_BASE_URL = 'http://10.0.0.108:3001/api';
+const API_BASE_URL = 'http://10.0.0.74:3001/api';
 
 interface OrderItem {
   product: {
@@ -29,23 +29,23 @@ interface OrderItem {
 }
 
 interface Order {
-  _id: string;
-  items: OrderItem[];
-  deliveryAddress: {
+  _id?: string;
+  items?: OrderItem[];
+  delivery_address?: {
     address: string;
     city: string;
     state?: string;
     pincode: string;
   };
-  paymentMethod: string;
-  subtotal: number;
-  tax: number;
-  deliveryCharge: number;
-  appFee: number;
-  totalAmount: number;
-  status: string;
-  paymentStatus: string;
-  createdAt: string;
+  payment_method?: string;
+  subtotal?: number;
+  tax?: number;
+  delivery_charge?: number;
+  app_fee?: number;
+  total_amount?: number;
+  order_status?: string;
+  payment_status?: string;
+  created_at?: string;
 }
 
 export default function OrdersScreen() {
@@ -154,50 +154,55 @@ export default function OrdersScreen() {
     </View>
   );
 
-  const renderOrder = ({ item }: { item: Order }) => (
-    <View style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderId}>Order #{item._id.slice(-8).toUpperCase()}</Text>
-          <Text style={styles.orderDate}>{formatDate(item.createdAt)}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
-        </View>
-      </View>
-
-      <View style={styles.orderItems}>
-        {item.items.map((orderItem, index) => (
-          <View key={index} style={styles.orderItemRow}>
-            <View style={styles.orderItemInfo}>
-              <Text style={styles.orderItemName} numberOfLines={2}>
-                {orderItem.product.name}
-              </Text>
-              <Text style={styles.orderItemBrand}>{orderItem.product.brand?.name}</Text>
-              <Text style={styles.orderItemQuantity}>Qty: {orderItem.quantity}</Text>
-            </View>
-            <Text style={styles.orderItemPrice}>₹{orderItem.price}</Text>
+  const renderOrder = ({ item }: { item: Order }) => {
+    return (
+      <View style={styles.orderCard}>
+        <View style={styles.orderHeader}>
+          <View style={styles.orderInfo}>
+            <Text style={styles.orderId}>Order #{item._id ? item._id.slice(-8).toUpperCase() : 'N/A'}</Text>
+            <Text style={styles.orderDate}>{item.created_at ? formatDate(item.created_at) : 'Date not available'}</Text>
           </View>
-        ))}
-      </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.order_status || 'pending') }]}>
+            <Text style={styles.statusText}>{getStatusText(item.order_status || 'pending')}</Text>
+          </View>
+        </View>
 
-      <View style={styles.orderFooter}>
-        <View style={styles.deliveryInfo}>
-          <Ionicons name="location-outline" size={16} color="#666" />
-          <Text style={styles.deliveryAddress} numberOfLines={1}>
-            {item.deliveryAddress.address}, {item.deliveryAddress.city}
-          </Text>
+        <View style={styles.orderItems}>
+          {(item.items || []).map((orderItem, index) => (
+            <View key={index} style={styles.orderItemRow}>
+              <View style={styles.orderItemInfo}>
+                <Text style={styles.orderItemName} numberOfLines={2}>
+                  {orderItem.product?.name || 'Product not available'}
+                </Text>
+                <Text style={styles.orderItemBrand}>{orderItem.product?.brand?.name}</Text>
+                <Text style={styles.orderItemQuantity}>Qty: {orderItem.quantity || 0}</Text>
+              </View>
+              <Text style={styles.orderItemPrice}>₹{(orderItem.price || 0).toFixed(2)}</Text>
+            </View>
+          ))}
         </View>
-        
-        <View style={styles.paymentInfo}>
-          <Text style={styles.paymentMethod}>
-            {item.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
-          </Text>
-          <Text style={styles.totalAmount}>₹{item.totalAmount.toFixed(2)}</Text>
+
+        <View style={styles.orderFooter}>
+          <View style={styles.deliveryInfo}>
+            <Ionicons name="location-outline" size={16} color="#666" />
+            <Text style={styles.deliveryAddress} numberOfLines={1}>
+              {item.delivery_address ? 
+                `${item.delivery_address.address}, ${item.delivery_address.city}` : 
+                'Address not available'
+              }
+            </Text>
+          </View>
+          
+          <View style={styles.paymentInfo}>
+            <Text style={styles.paymentMethod}>
+              {(item.payment_method || 'cod') === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
+            </Text>
+            <Text style={styles.totalAmount}>₹{(item.total_amount || 0).toFixed(2)}</Text>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -239,7 +244,7 @@ export default function OrdersScreen() {
         <FlatList
           data={orders}
           renderItem={renderOrder}
-          keyExtractor={(item) => item._id}
+          keyExtractor={(item) => item._id || `order-${Math.random()}`}
           style={styles.ordersList}
           showsVerticalScrollIndicator={false}
           refreshControl={

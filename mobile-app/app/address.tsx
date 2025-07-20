@@ -21,10 +21,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
+import { reverseGeocode, searchAddresses, geocodeAddress } from '../services/api';
 
 const { width, height } = Dimensions.get('window');
 
-const API_BASE_URL = 'http://10.0.0.108:3001/api';
+// Use dynamic API URL from services
+const getApiUrl = () => {
+  // Use computer's IP address for React Native development
+  return 'http://10.0.0.74:3001/api';
+};
 
 interface SearchResult {
   place_id: string;
@@ -48,7 +53,7 @@ interface AddressData {
 }
 
 export default function AddressScreen() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const params = useLocalSearchParams();
   const isFromCheckout = params.from === 'checkout';
   
@@ -67,7 +72,9 @@ export default function AddressScreen() {
   const [searching, setSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [updatingMap, setUpdatingMap] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const mapRef = useRef(null);
+  const searchInputRef = useRef<TextInput>(null);
   const geocodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -79,13 +86,13 @@ export default function AddressScreen() {
         clearTimeout(geocodeTimeoutRef.current);
       }
     };
-  }, []);
+  }, [token, user]);
 
   useEffect(() => {
     if (searchQuery.length > 2) {
       const timeoutId = setTimeout(() => {
-        searchAddresses(searchQuery);
-      }, 500);
+        performAddressSearch(searchQuery);
+      }, 300); // Reduced debounce time for better responsiveness
       return () => clearTimeout(timeoutId);
     } else {
       setSearchResults([]);
@@ -93,32 +100,18 @@ export default function AddressScreen() {
     }
   }, [searchQuery]);
 
-  const searchAddresses = async (query: string) => {
+  const performAddressSearch = async (query: string) => {
     if (!query.trim()) return;
     
     setSearching(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/address/search?query=${encodeURIComponent(query)}`);
-      if (response.ok) {
-        const data = await response.json();
-        // If no results from API, create a simple suggestion
-        if (data.predictions && data.predictions.length > 0) {
-          setSearchResults(data.predictions);
-          setShowSearchResults(true);
-        } else {
-          // Create a simple suggestion based on the query
-          setSearchResults([{
-            place_id: 'manual',
-            description: query,
-            structured_formatting: {
-              main_text: query,
-              secondary_text: 'Enter manually'
-            }
-          }]);
-          setShowSearchResults(true);
-        }
+      const data = await searchAddresses(query);
+      
+      if (data.predictions && data.predictions.length > 0) {
+        setSearchResults(data.predictions);
+        setShowSearchResults(true);
       } else {
-        // Fallback: create a simple suggestion
+        // Create a simple suggestion based on the query
         setSearchResults([{
           place_id: 'manual',
           description: query,
@@ -129,8 +122,16 @@ export default function AddressScreen() {
         }]);
         setShowSearchResults(true);
       }
-    } catch (error) {
-      console.error('Error searching addresses:', error);
+    } catch (error: any) {
+      // Check if it's a network error or API error
+      if (error.response) {
+        // API error - could show user-friendly message
+      } else if (error.request) {
+        // Network error - could show retry option
+      } else {
+        // Other error
+      }
+      
       // Fallback: create a simple suggestion
       setSearchResults([{
         place_id: 'manual',
@@ -147,43 +148,34 @@ export default function AddressScreen() {
   };
 
   const updateMapFromAddress = async (addressText: string) => {
-    if (!addressText.trim()) return;
-    
+    if (!addressText.trim()) {
+      return;
+    }
     setUpdatingMap(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/address/geocode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ address: addressText }),
-      });
+      const data = await geocodeAddress(addressText);
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.latitude && data.longitude) {
-          setLatitude(data.latitude);
-          setLongitude(data.longitude);
-          setRegion({
-            latitude: data.latitude,
-            longitude: data.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
-          console.log('Map updated with coordinates:', data.latitude, data.longitude);
-        } else {
-          console.log('Geocoding failed for address:', addressText);
-          // Fallback: use default coordinates and show a message
-          Alert.alert('Info', 'Could not get exact coordinates for this address. You can manually adjust the map location.');
+      if (data.latitude && data.longitude) {
+        setLatitude(data.latitude);
+        setLongitude(data.longitude);
+        setRegion({
+          latitude: data.latitude,
+          longitude: data.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+        
+        if (data.note) {
         }
       } else {
-        console.log('Geocoding failed for address:', addressText);
-        // Fallback: use default coordinates and show a message
         Alert.alert('Info', 'Could not get exact coordinates for this address. You can manually adjust the map location.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating map from address:', error);
-      // Fallback: use default coordinates and show a message
+      
+      if (error.response) {
+      }
+      
       Alert.alert('Info', 'Could not get exact coordinates for this address. You can manually adjust the map location.');
     } finally {
       setUpdatingMap(false);
@@ -194,6 +186,8 @@ export default function AddressScreen() {
     setSearchQuery(result.description);
     setAddress(result.description);
     setShowSearchResults(false);
+    setIsSearchFocused(false);
+    Keyboard.dismiss();
     
     // Update map coordinates for the selected address
     await updateMapFromAddress(result.description);
@@ -243,74 +237,207 @@ export default function AddressScreen() {
     }
   };
 
-  const handleMapPress = (event: any) => {
+  const handleMapPress = async (event: any) => {
     const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
     setLatitude(lat);
     setLongitude(lng);
+    
+    // Get address for the selected location
+    await getAddressFromCoordinates(lat, lng);
+  };
+
+  const getAddressFromCoordinates = async (lat: number, lng: number) => {
+    try {
+      // First try backend API for reverse geocoding
+      let backendSuccess = false;
+      try {
+        const data = await reverseGeocode(lat, lng);
+        
+        if (data.formattedAddress) {
+          setAddress(data.formattedAddress);
+          setSearchQuery(data.formattedAddress);
+          backendSuccess = true;
+          return; // Success, exit early
+        }
+      } catch (backendError: any) {
+      }
+      
+      // If backend failed, use Expo Location fallback
+      if (!backendSuccess) {
+        
+        try {
+          // Fallback: Use Expo Location for reverse geocoding
+          const addressResponse = await Location.reverseGeocodeAsync({
+            latitude: lat,
+            longitude: lng,
+          });
+
+          if (addressResponse.length > 0) {
+            const addr = addressResponse[0];
+            const fullAddress = [
+              addr.street,
+              addr.district,
+              addr.city,
+              addr.region,
+              addr.postalCode,
+            ].filter(Boolean).join(', ');
+            
+            setAddress(fullAddress);
+            setSearchQuery(fullAddress);
+          } else {
+            // If no address found, create a basic one from coordinates
+            const basicAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            setAddress(basicAddress);
+            setSearchQuery(basicAddress);
+          }
+        } catch (expoError) {
+        }
+      }
+    } catch (error) {
+      console.error('Error getting address from coordinates:', error);
+      
+      // Last resort: create address from coordinates
+      const fallbackAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setAddress(fallbackAddress);
+      setSearchQuery(fallbackAddress);
+    }
   };
 
   const handleSaveAddress = async () => {
     if (!address.trim()) {
-      Alert.alert('Error', 'Please enter your address');
-      return;
-    }
-
-    if (!token) {
-      Alert.alert('Error', 'Please login to save your address');
+      Alert.alert('Error', 'Please enter a delivery address');
       return;
     }
 
     setLoading(true);
     try {
-      // If called from checkout, format the address data and go back
       if (isFromCheckout) {
+        // For checkout flow, create address data and navigate back with parameters
+        const addressParts = address.split(',').map(part => part.trim()).filter(part => part.length > 0);
+        
+        // Improved address parsing
+        let city = '';
+        let state = '';
+        let pincode = '';
+        
+        // Look for pincode (6-digit number) at the end
+        const pincodeMatch = address.match(/\b\d{6}\b/);
+        if (pincodeMatch) {
+          pincode = pincodeMatch[0];
+        }
+        
+        // Remove pincode and "India" from address parts for better parsing
+        const cleanParts = addressParts.filter(part => 
+          part !== pincode && 
+          part.toLowerCase() !== 'india' && 
+          !/^\d{6}$/.test(part)
+        );
+        
+        if (cleanParts.length >= 2) {
+          // Last part is usually state, second to last is city
+          city = cleanParts[cleanParts.length - 2] || '';
+          state = cleanParts[cleanParts.length - 1] || '';
+        } else if (cleanParts.length === 1) {
+          city = cleanParts[0];
+          state = '';
+        }
+        
+        // If we couldn't find a pincode, try to extract from the end
+        if (!pincode && addressParts.length > 0) {
+          const lastPart = addressParts[addressParts.length - 1];
+          if (/^\d{6}$/.test(lastPart)) {
+            pincode = lastPart;
+          }
+        }
+        
         const addressData: AddressData = {
-          address: address.split(',')[0] || address,
-          city: address.split(',')[1]?.trim() || '',
-          state: address.split(',')[2]?.trim() || '',
-          pincode: address.split(',').pop()?.trim() || '',
-          fullAddress: address,
-          coordinates: { latitude, longitude }
+          address: address.trim(),
+          city: city,
+          state: state,
+          pincode: pincode,
+          fullAddress: address.trim(),
+          coordinates: {
+            latitude,
+            longitude,
+          },
         };
-        
-        // Navigate back to checkout with the address data as URL parameters
-        const addressParams = {
-          address: addressData.address,
-          city: addressData.city,
-          state: addressData.state,
-          pincode: addressData.pincode,
-          fullAddress: addressData.fullAddress,
-          latitude: addressData.coordinates?.latitude.toString() || '',
-          longitude: addressData.coordinates?.longitude.toString() || ''
-        };
-        
+
         // Navigate back to checkout with address parameters
         router.back();
+        
+        // Use a timeout to ensure the navigation completes before setting params
+        setTimeout(() => {
+          router.setParams({
+            address: addressData.address,
+            city: addressData.city,
+            state: addressData.state,
+            pincode: addressData.pincode,
+            fullAddress: addressData.fullAddress,
+            latitude: latitude.toString(),
+            longitude: longitude.toString(),
+          });
+        }, 100);
+        
         return;
       }
 
       // Save to user profile (when called from home screen)
-      console.log('Saving address to database:', {
-        address: address.trim(),
-        latitude,
-        longitude
-      });
+      const apiUrl = getApiUrl();
 
-      const response = await fetch(`${API_BASE_URL}/user/address`, {
+      // Use the same improved parsing for database save
+      const addressParts = address.split(',').map(part => part.trim()).filter(part => part.length > 0);
+      
+      // Look for pincode (6-digit number) at the end
+      const pincodeMatch = address.match(/\b\d{6}\b/);
+      let pincode = '';
+      if (pincodeMatch) {
+        pincode = pincodeMatch[0];
+      }
+      
+      // Remove pincode and "India" from address parts for better parsing
+      const cleanParts = addressParts.filter(part => 
+        part !== pincode && 
+        part.toLowerCase() !== 'india' && 
+        !/^\d{6}$/.test(part)
+      );
+      
+      let city = '';
+      let state = '';
+      
+      if (cleanParts.length >= 2) {
+        // Last part is usually state, second to last is city
+        city = cleanParts[cleanParts.length - 2] || '';
+        state = cleanParts[cleanParts.length - 1] || '';
+      } else if (cleanParts.length === 1) {
+        city = cleanParts[0];
+        state = '';
+      }
+      
+      // If we couldn't find a pincode, try to extract from the end
+      if (!pincode && addressParts.length > 0) {
+        const lastPart = addressParts[addressParts.length - 1];
+        if (/^\d{6}$/.test(lastPart)) {
+          pincode = lastPart;
+        }
+      }
+
+      const requestBody = {
+        address: address.trim(),
+        city: city,
+        state: state,
+        pincode: pincode,
+        latitude,
+        longitude,
+      };
+
+      const response = await fetch(`${apiUrl}/user/addresses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          address: address.trim(),
-          latitude,
-          longitude,
-        }),
+        body: JSON.stringify(requestBody),
       });
-
-      const responseData = await response.json();
-      console.log('Save address response:', response.status, responseData);
 
       if (response.ok) {
         Alert.alert('Success', 'Address saved successfully', [
@@ -323,10 +450,18 @@ export default function AddressScreen() {
           }
         ]);
       } else {
-        Alert.alert('Error', responseData.message || 'Failed to save address');
+        const responseData = await response.json();
+        Alert.alert('Error', responseData.detail || responseData.message || 'Failed to save address');
       }
-    } catch (error) {
-      console.error('Error saving address:', error);
+    } catch (error: any) {
+      console.error('❌ Error saving address:', error);
+      
+      // Check if it's a network error or API error
+      if (error.response) {
+      } else if (error.request) {
+      } else {
+      }
+      
       Alert.alert('Error', 'Failed to save address. Please try again.');
     } finally {
       setLoading(false);
@@ -346,52 +481,8 @@ export default function AddressScreen() {
     </TouchableOpacity>
   );
 
-  const renderHeader = () => (
-    <View>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {isFromCheckout ? 'Select Delivery Address' : 'Set Delivery Address'}
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search for an address..."
-            placeholderTextColor="#999"
-            returnKeyType="search"
-            blurOnSubmit={false}
-          />
-          {searching && (
-            <ActivityIndicator size="small" color="#007AFF" style={styles.searchLoading} />
-          )}
-        </View>
-        
-        {showSearchResults && searchResults.length > 0 && (
-          <View style={styles.searchResultsContainer}>
-            <FlatList
-              data={searchResults}
-              renderItem={renderSearchResult}
-              keyExtractor={(item) => item.place_id}
-              style={styles.searchResultsList}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled={true}
-            />
-          </View>
-        )}
-      </View>
-
-      {/* Map */}
+  const renderMapSection = () => (
+    <View style={styles.mapSection}>
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
@@ -414,19 +505,20 @@ export default function AddressScreen() {
             title="Delivery Address"
             description="Tap and drag to adjust"
             draggable
-            onDragEnd={(e) => {
+            onDragEnd={async (e) => {
               const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
               setLatitude(lat);
               setLongitude(lng);
+              
+              // Get address for the new location
+              await getAddressFromCoordinates(lat, lng);
             }}
           />
         </MapView>
-        
         {/* Center indicator */}
         <View style={styles.centerIndicator}>
           <Ionicons name="location" size={24} color="#007AFF" />
         </View>
-
         {/* Update Map Button */}
         <TouchableOpacity
           style={styles.updateMapButton}
@@ -443,8 +535,11 @@ export default function AddressScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
 
-      {/* Address Input */}
+  const renderAddressInputSection = () => (
+    <View style={styles.addressInputSection}>
       <View style={styles.inputContainer}>
         <Text style={styles.inputLabel}>Delivery Address</Text>
         <Text style={styles.inputHint}>Type your complete address below:</Text>
@@ -454,16 +549,22 @@ export default function AddressScreen() {
           onChangeText={(text) => {
             setAddress(text);
             setSearchQuery(text);
-            
+            // Trigger search immediately for better UX
+            if (text.trim().length > 2) {
+              performAddressSearch(text);
+            } else {
+              setSearchResults([]);
+              setShowSearchResults(false);
+            }
             // Debounce geocoding to avoid too many API calls
             if (geocodeTimeoutRef.current) {
               clearTimeout(geocodeTimeoutRef.current);
             }
             geocodeTimeoutRef.current = setTimeout(() => {
-              if (text.trim().length > 10) { // Only geocode if address is substantial
+              if (text.trim().length > 10) {
                 updateMapFromAddress(text);
               }
-            }, 1000); // Wait 1 second after user stops typing
+            }, 1000);
           }}
           placeholder="Example: 123 Main Street, Apartment 4B, Mumbai, Maharashtra 400001"
           multiline
@@ -476,32 +577,35 @@ export default function AddressScreen() {
           autoCapitalize="words"
           enablesReturnKeyAutomatically={false}
         />
-        
         <TouchableOpacity style={styles.useCurrentLocationButton} onPress={getCurrentLocation}>
           <Ionicons name="location-outline" size={20} color="#007AFF" />
           <Text style={styles.useCurrentLocationText}>Use Current Location</Text>
         </TouchableOpacity>
-      </View>
+        
 
-      {/* Save Button */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
-          onPress={handleSaveAddress}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>
-              {isFromCheckout ? 'Select Address' : 'Save Address'}
-            </Text>
-          )}
-        </TouchableOpacity>
       </View>
     </View>
   );
 
+  const renderSaveButton = () => (
+    <View style={styles.saveButtonSection}>
+      <TouchableOpacity 
+        style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
+        onPress={handleSaveAddress}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.saveButtonText}>
+            {isFromCheckout ? 'Select Address' : 'Save Address'}
+          </Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Main render
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -509,16 +613,83 @@ export default function AddressScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <FlatList
-          data={[]}
-          renderItem={() => null}
-          ListHeaderComponent={renderHeader}
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>
+            {isFromCheckout ? 'Select Delivery Address' : 'Set Delivery Address'}
+          </Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        {/* Search Section - Fixed Position */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search for an address..."
+                placeholderTextColor="#999"
+                returnKeyType="search"
+                blurOnSubmit={false}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+              />
+              {searching && (
+                <ActivityIndicator size="small" color="#007AFF" style={styles.searchLoading} />
+              )}
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    setShowSearchResults(false);
+                  }}
+                  style={styles.clearButton}
+                >
+                  <Ionicons name="close-circle" size={20} color="#999" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Auto-complete Results - Fixed Position */}
+          {showSearchResults && searchResults.length > 0 && (
+            <View style={styles.searchResultsContainer}>
+              <FlatList
+                data={searchResults}
+                renderItem={renderSearchResult}
+                keyExtractor={(item) => item.place_id}
+                style={styles.searchResultsList}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={false}
+                contentContainerStyle={styles.searchResultsContent}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Main Content - Scrollable */}
+        <ScrollView
+          style={styles.scrollView}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           contentContainerStyle={styles.scrollContent}
-          nestedScrollEnabled={true}
-        />
+          bounces={false}
+          nestedScrollEnabled={false}
+        >
+          {renderMapSection()}
+          {renderAddressInputSection()}
+          {renderSaveButton()}
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -534,6 +705,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20,
   },
   header: {
     flexDirection: 'row',
@@ -543,6 +715,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    backgroundColor: '#fff',
   },
   backButton: {
     padding: 8,
@@ -555,11 +728,15 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  searchContainer: {
-    padding: 16,
+  searchSection: {
+    position: 'relative',
+    zIndex: 1000,
     backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  searchContainer: {
+    padding: 16,
   },
   searchInputContainer: {
     flexDirection: 'row',
@@ -578,38 +755,49 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#333',
+    paddingVertical: 4,
   },
   searchLoading: {
     marginLeft: 10,
   },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
   searchResultsContainer: {
     position: 'absolute',
     top: '100%',
-    left: 0,
-    right: 0,
+    left: 16,
+    right: 16,
     backgroundColor: '#fff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1001,
+    maxHeight: 300,
   },
   searchResultsList: {
-    maxHeight: 200,
+    maxHeight: 300,
+  },
+  searchResultsContent: {
+    paddingVertical: 8,
   },
   searchResultItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
   searchResultText: {
-    marginLeft: 10,
+    marginLeft: 12,
+    flex: 1,
   },
   searchResultMain: {
     fontSize: 16,
@@ -619,10 +807,17 @@ const styles = StyleSheet.create({
   searchResultSecondary: {
     fontSize: 14,
     color: '#666',
+    marginTop: 2,
+  },
+  mapSection: {
+    marginTop: 16,
   },
   mapContainer: {
-    height: 300,
+    height: 250,
     position: 'relative',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   map: {
     flex: 1,
@@ -635,11 +830,34 @@ const styles = StyleSheet.create({
     marginTop: -24,
     zIndex: 1,
   },
+  updateMapButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  updateMapText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  addressInputSection: {
+    marginTop: 16,
+  },
   inputContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
     backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
   },
   inputLabel: {
     fontSize: 16,
@@ -650,7 +868,7 @@ const styles = StyleSheet.create({
   inputHint: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   addressInput: {
     borderWidth: 1,
@@ -660,80 +878,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 80,
     textAlignVertical: 'top',
+    backgroundColor: '#f9f9f9',
   },
   useCurrentLocationButton: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 12,
-    padding: 12,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
+    paddingVertical: 8,
   },
   useCurrentLocationText: {
     marginLeft: 8,
+    fontSize: 16,
     color: '#007AFF',
-    fontSize: 16,
+    fontWeight: '500',
   },
-  updateMapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-  updateMapText: {
-    marginLeft: 8,
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+  saveButtonSection: {
+    marginTop: 24,
+    paddingHorizontal: 16,
   },
   saveButton: {
     backgroundColor: '#007AFF',
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   saveButtonDisabled: {
     backgroundColor: '#ccc',
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  inputGroup: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    minHeight: 50,
   },
 }); 

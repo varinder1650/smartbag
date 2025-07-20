@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -30,53 +31,64 @@ const ManualAddressScreen = () => {
     landmark: '',
   });
 
+  const cityInputRef = useRef<TextInput>(null);
+  const stateInputRef = useRef<TextInput>(null);
+  const pincodeInputRef = useRef<TextInput>(null);
+  const landmarkInputRef = useRef<TextInput>(null);
+
   const handleSaveAddress = () => {
-    // Validate required fields
-    if (!address.street || !address.city || !address.pincode) {
-      Alert.alert('Error', 'Please fill in all required fields (Street, City, Pincode)');
+    if (!address.street.trim() || !address.city.trim() || !address.pincode.trim()) {
+      Alert.alert('Error', 'Please fill in all required fields (Street, City, and Pincode)');
       return;
     }
 
-    // Validate pincode format (6 digits for India)
-    const pincodeRegex = /^\d{6}$/;
-    if (!pincodeRegex.test(address.pincode)) {
+    if (address.pincode.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit pincode');
       return;
     }
+
+    const fullAddress = [
+      address.street,
+      address.landmark,
+      address.city,
+      address.state,
+      address.pincode,
+    ].filter(Boolean).join(', ');
 
     const addressData: AddressData = {
       address: address.street,
       city: address.city,
       state: address.state,
       pincode: address.pincode,
-      fullAddress: `${address.street}, ${address.city}, ${address.state} ${address.pincode}`.trim(),
+      fullAddress: fullAddress,
     };
 
-    // Pass the address data back to the previous screen
+    // Navigate back with address data
     router.back();
-    
-    // You can also store this in global state or pass it through navigation params
-    // For now, we'll use a simple approach and let the user know
-    Alert.alert(
-      'Address Saved',
-      `Delivery address: ${addressData.fullAddress}`,
-      [{ text: 'OK' }]
-    );
   };
 
   return (
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Enter Address Manually</Text>
+        <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.formContainer}>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Street Address *</Text>
@@ -87,48 +99,66 @@ const ManualAddressScreen = () => {
               placeholder="Enter street address"
               multiline
               numberOfLines={2}
+              returnKeyType="next"
+              onSubmitEditing={() => cityInputRef.current?.focus()}
+              blurOnSubmit={false}
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>City *</Text>
             <TextInput
+              ref={cityInputRef}
               style={styles.input}
               value={address.city}
               onChangeText={(text) => setAddress({ ...address, city: text })}
               placeholder="Enter city name"
+              returnKeyType="next"
+              onSubmitEditing={() => stateInputRef.current?.focus()}
+              blurOnSubmit={false}
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>State</Text>
             <TextInput
+              ref={stateInputRef}
               style={styles.input}
               value={address.state}
               onChangeText={(text) => setAddress({ ...address, state: text })}
               placeholder="Enter state name"
+              returnKeyType="next"
+              onSubmitEditing={() => pincodeInputRef.current?.focus()}
+              blurOnSubmit={false}
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Pincode *</Text>
             <TextInput
+              ref={pincodeInputRef}
               style={styles.input}
               value={address.pincode}
               onChangeText={(text) => setAddress({ ...address, pincode: text })}
               placeholder="Enter 6-digit pincode"
               keyboardType="numeric"
               maxLength={6}
+              returnKeyType="next"
+              onSubmitEditing={() => landmarkInputRef.current?.focus()}
+              blurOnSubmit={false}
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Landmark (Optional)</Text>
             <TextInput
+              ref={landmarkInputRef}
               style={styles.input}
               value={address.landmark}
               onChangeText={(text) => setAddress({ ...address, landmark: text })}
               placeholder="Near hospital, school, etc."
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
             />
           </View>
 
@@ -145,29 +175,38 @@ const ManualAddressScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    backgroundColor: '#fff',
   },
   backButton: {
-    marginRight: 15,
+    padding: 8,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
   },
+  placeholder: {
+    width: 40,
+  },
   content: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
   formContainer: {
-    padding: 20,
+    padding: 16,
   },
   inputGroup: {
     marginBottom: 20,
@@ -184,7 +223,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#f9f9f9',
+    minHeight: 50,
   },
   saveButton: {
     backgroundColor: '#007AFF',
@@ -194,10 +234,15 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 8,
     marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   saveButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     marginLeft: 8,
   },

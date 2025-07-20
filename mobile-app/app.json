@@ -17,6 +17,11 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to help you select your delivery address.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to help you select your delivery address."
+      },
+      "config": {
+        "krutrimMaps": {
+          "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
+        }
       }
     },
     "android": {
@@ -28,8 +33,8 @@
         "ACCESS_COARSE_LOCATION"
       ],
       "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyDyo33LbdlGo1vNxEMUQSS9W5EMNxYFJ14"
+        "krutrimMaps": {
+          "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
         }
       }
     },

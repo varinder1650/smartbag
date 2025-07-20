@@ -137,7 +137,7 @@ const Dashboard = () => {
       )}
 
       <Grid container spacing={3} sx={{ mt: 2 }}>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid xs={12} sm={6} md={4}>
           <StatCard
             title="Total Products"
             value={stats.products}
@@ -145,7 +145,7 @@ const Dashboard = () => {
             color="primary.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid xs={12} sm={6} md={4}>
           <StatCard
             title="Categories"
             value={stats.categories}
@@ -153,7 +153,7 @@ const Dashboard = () => {
             color="secondary.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid xs={12} sm={6} md={4}>
           <StatCard
             title="Brands"
             value={stats.brands}
@@ -161,7 +161,7 @@ const Dashboard = () => {
             color="success.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid xs={12} sm={6} md={4}>
           <StatCard
             title="Total Orders"
             value={stats.orders}
@@ -169,7 +169,7 @@ const Dashboard = () => {
             color="warning.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid xs={12} sm={6} md={4}>
           <StatCard
             title="Registered Users"
             value={stats.users}
@@ -177,7 +177,7 @@ const Dashboard = () => {
             color="info.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid xs={12} sm={6} md={4}>
           <StatCard
             title="Total Sales"
             value={`₹${stats.totalSales.toLocaleString()}`}

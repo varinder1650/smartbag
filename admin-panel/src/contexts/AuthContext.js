@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import api from '../services/api';
 
 const AuthContext = createContext();
 
@@ -13,11 +14,11 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Set up axios defaults with environment variable support
-  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001/api';
   axios.defaults.baseURL = apiBaseUrl;
 
   // Add request interceptor for better error handling
@@ -38,8 +39,11 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
+    console.log('Token in localStorage:', token);
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      console.log('Authorization header set:', axios.defaults.headers.common['Authorization']);
       // Verify token is still valid
       checkAuthStatus();
     } else {
@@ -49,8 +53,8 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      const response = await axios.get('/auth/users');
-      setUser(response.data[0]); // For now, just get the first user
+      const response = await axios.get('/auth/me');
+      setUser(response.data);
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Auth check failed:', error);
@@ -63,16 +67,23 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (emailOrPhone, password) => {
     try {
+      console.log('Sending login request with:', { emailOrPhone, password });
       const response = await axios.post('/auth/login', {
         emailOrPhone,
         password,
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
-      const { token, user } = response.data;
-      
-      if (user.isAdmin) {
-        localStorage.setItem('adminToken', token);
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      console.log('Login response:', response.data);
+      const { token, access_token, user } = response.data;
+      const authToken = token || access_token;
+      if (user.role === 'admin') {
+        localStorage.setItem('adminToken', authToken);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+        api.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
         setUser(user);
         setIsAuthenticated(true);
         return { success: true };
@@ -91,6 +102,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('adminToken');
     delete axios.defaults.headers.common['Authorization'];
+    delete api.defaults.headers.common['Authorization'];
     setUser(null);
     setIsAuthenticated(false);
   };

@@ -1,11 +1,19 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Force use of localhost for development
+const getApiUrl = () => {
+  // Use computer's IP address for React Native development
+  return 'http://10.0.0.74:3001/api';
+};
+
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://10.0.0.108:3001/api',
-  timeout: 10000,
+  baseURL: getApiUrl(),
+  timeout: 15000, // Increased timeout
 });
+
+console.log('🔗 API Base URL:', getApiUrl());
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
@@ -161,6 +169,30 @@ export const getUserOrders = async () => {
 export const validateAddress = async (address) => {
   try {
     const response = await api.post('/address/validate', { address });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const searchAddresses = async (query) => {
+  try {
+    const response = await api.get(`/address/search?query=${encodeURIComponent(query)}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const geocodeAddress = async (address) => {
+  try {
+    const formData = new FormData();
+    formData.append('address', address);
+    const response = await api.post('/address/geocode', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   } catch (error) {
     throw error;

@@ -14,8 +14,8 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 // Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.108:3001/api';
-const IMAGE_BASE_URL = 'http://10.0.0.108:3001';
+const API_BASE_URL = 'http://10.0.0.74:3001/api';
+const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -69,22 +69,22 @@ export default function ProductDetailScreen() {
       Alert.alert('Error', 'Please login to add items to cart');
       return;
     }
-
     try {
+      console.log('addToCart: token:', token);
+      console.log('addToCart: productId:', id);
+      const body = JSON.stringify({ productId: id, quantity: 1 });
+      console.log('addToCart: request body:', body);
       const response = await fetch(`${API_BASE_URL}/cart/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          productId: id,
-          quantity: 1,
-        }),
+        body,
       });
-
+      console.log('addToCart: response status:', response.status);
       const data = await response.json();
-
+      console.log('addToCart: response data:', data);
       if (response.ok) {
         setShowCartNotification(true);
         setTimeout(() => setShowCartNotification(false), 2000);
@@ -92,6 +92,7 @@ export default function ProductDetailScreen() {
         Alert.alert('Error', data.message || 'Failed to add to cart');
       }
     } catch (error) {
+      console.error('addToCart: error:', error);
       Alert.alert('Error', 'Failed to add to cart');
     }
   };
@@ -106,27 +107,33 @@ export default function ProductDetailScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  const renderImageItem = ({ item, index }: { item: string; index: number }) => (
-    <View style={styles.imageItem}>
-      <Image
-        source={{
-          uri:
-            item && item.startsWith('http')
-              ? item
-              : `${API_BASE_URL.replace('/api', '')}${item}?_t=${Date.now()}`
-        }}
-        style={styles.carouselImage}
-        resizeMode="cover"
-        onError={(error) => {
-          console.log('Carousel image failed to load for product:', product?.name, 'Image:', item, 'Error:', error);
-        }}
-        onLoad={() => {
-          console.log('Carousel image loaded successfully for product:', product?.name, 'Image:', item);
-        }}
-        defaultSource={{ uri: 'https://via.placeholder.com/400x300' }}
-      />
-    </View>
-  );
+  const renderImageItem = ({ item, index }: { item: string; index: number }) => {
+    let imageUrl = '';
+    if (typeof item === 'string' && item.startsWith('http')) {
+      imageUrl = item;
+    } else if (typeof item === 'string' && item.trim() !== '') {
+      imageUrl = `${API_BASE_URL.replace('/api', '')}${item}?_t=${Date.now()}`;
+    }
+    if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '') {
+      imageUrl = 'https://via.placeholder.com/400x300';
+    }
+    return (
+      <View style={styles.imageItem}>
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.carouselImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log('Carousel image failed to load for product:', product?.name, 'Image:', imageUrl, 'Error:', error);
+          }}
+          onLoad={() => {
+            console.log('Carousel image loaded successfully for product:', product?.name, 'Image:', imageUrl);
+          }}
+          defaultSource={{ uri: 'https://via.placeholder.com/400x300' }}
+        />
+      </View>
+    );
+  };
 
   const renderDotIndicator = () => {
     if (!product?.images || product.images.length <= 1) return null;

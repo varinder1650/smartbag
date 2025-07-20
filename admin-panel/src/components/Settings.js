@@ -124,9 +124,9 @@ const Settings = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Grid columns={12} spacing={3}>
         {/* Fee Settings */}
-        <Grid item xs={12} md={8}>
+        <Grid columnSpan={12} columnSpanMd={8}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -134,8 +134,8 @@ const Settings = () => {
               </Typography>
               <Divider sx={{ mb: 3 }} />
               
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6}>
+              <Grid columns={12} spacing={3}>
+                <Grid columnSpan={12} columnSpanSm={6}>
                   <TextField
                     fullWidth
                     label="App Fee (₹)"
@@ -147,7 +147,7 @@ const Settings = () => {
                   />
                 </Grid>
                 
-                <Grid item xs={12} sm={6}>
+                <Grid columnSpan={12} columnSpanSm={6}>
                   <TextField
                     fullWidth
                     label="Delivery Charge (₹)"
@@ -159,7 +159,7 @@ const Settings = () => {
                   />
                 </Grid>
                 
-                <Grid item xs={12} sm={6}>
+                <Grid columnSpan={12} columnSpanSm={6}>
                   <TextField
                     fullWidth
                     label="GST Rate (%)"
@@ -171,7 +171,7 @@ const Settings = () => {
                   />
                 </Grid>
                 
-                <Grid item xs={12} sm={6}>
+                <Grid columnSpan={12} columnSpanSm={6}>
                   <TextField
                     fullWidth
                     label="Minimum Order Amount (₹)"
@@ -183,7 +183,7 @@ const Settings = () => {
                   />
                 </Grid>
                 
-                <Grid item xs={12} sm={6}>
+                <Grid columnSpan={12} columnSpanSm={6}>
                   <TextField
                     fullWidth
                     label="Max Delivery Distance (km)"
@@ -211,7 +211,7 @@ const Settings = () => {
         </Grid>
 
         {/* Example Calculation */}
-        <Grid item xs={12} md={4}>
+        <Grid columnSpan={12} columnSpanMd={4}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>

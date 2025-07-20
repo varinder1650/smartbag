@@ -1,279 +1,210 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
         {
           text: 'Logout',
           style: 'destructive',
-          onPress: () => {
-            logout();
-            router.replace('/auth/login');
+          onPress: async () => {
+            setLoggingOut(true);
+            try {
+              await logout();
+              router.replace('/auth/login');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            } finally {
+              setLoggingOut(false);
+            }
           },
         },
       ]
     );
   };
 
-  const handleProfileManagement = () => {
-    router.push('/profile-management');
+  const handleEditProfile = () => {
+    try {
+      router.push('/profile-management');
+    } catch (error) {
+      Alert.alert('Error', 'Unable to navigate to profile management');
+    }
   };
 
-  const handleOrders = () => {
-    router.push('/orders');
+  const handleMyOrders = () => {
+    try {
+      router.push('/orders');
+    } catch (error) {
+      Alert.alert('Error', 'Unable to navigate to orders');
+    }
+  };
+
+  const handleMyAddresses = () => {
+    try {
+      router.push('/address');
+    } catch (error) {
+      Alert.alert('Error', 'Unable to navigate to addresses');
+    }
+  };
+
+  const handlePaymentMethods = () => {
+    Alert.alert('Payment Methods', 'This feature is coming soon!');
+  };
+
+  const handleNotifications = () => {
+    Alert.alert('Notifications', 'This feature is coming soon!');
+  };
+
+  const handleHelpSupport = () => {
+    Alert.alert('Help & Support', 'For support, please contact us at support@example.com');
   };
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
-        </View>
-
-        <ScrollView 
-          style={styles.scrollContainer}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.profileCard}>
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
-                </Text>
-              </View>
-            </View>
-            
-            <Text style={styles.userName}>{user?.name || 'User Name'}</Text>
-            <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
-          </View>
-
-          {/* Removed Personal Information Section */}
-
-          <TouchableOpacity
-            style={styles.profileManagementButton}
-            onPress={handleProfileManagement}
-          >
-            <Ionicons name="settings-outline" size={20} color="#007AFF" />
-            <Text style={styles.profileManagementButtonText}>Profile Management</Text>
-            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.ordersButton}
-            onPress={handleOrders}
-          >
-            <Ionicons name="receipt-outline" size={20} color="#007AFF" />
-            <Text style={styles.ordersButtonText}>My Orders</Text>
-            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
-          </TouchableOpacity>
-
-          {/* Contact Us Button */}
-          <TouchableOpacity
-            style={styles.contactUsButton}
-            onPress={() => {
-              // You can update this to open a contact form, email, or support page
-              Alert.alert('Contact Us', 'Email us at support@example.com');
-            }}
-          >
-            <Ionicons name="mail-outline" size={20} color="#007AFF" />
-            <Text style={styles.contactUsButtonText}>Contact Us</Text>
-            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </ScrollView>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Profile</Text>
       </View>
+
+      <View style={styles.userInfo}>
+        <Text style={styles.name}>{user?.name || 'User'}</Text>
+        <Text style={styles.email}>{user?.email || 'No email'}</Text>
+        <Text style={styles.phone}>{user?.phone || 'No phone'}</Text>
+      </View>
+
+      <View style={styles.menuSection}>
+        <TouchableOpacity style={styles.menuItem} onPress={handleEditProfile}>
+          <Ionicons name="person-outline" size={24} color="#333" />
+          <Text style={styles.menuText}>Edit Profile</Text>
+          <Ionicons name="chevron-forward" size={24} color="#ccc" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handleMyOrders}>
+          <Ionicons name="receipt-outline" size={24} color="#333" />
+          <Text style={styles.menuText}>My Orders</Text>
+          <Ionicons name="chevron-forward" size={24} color="#ccc" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handleMyAddresses}>
+          <Ionicons name="location-outline" size={24} color="#333" />
+          <Text style={styles.menuText}>My Addresses</Text>
+          <Ionicons name="chevron-forward" size={24} color="#ccc" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handlePaymentMethods}>
+          <Ionicons name="card-outline" size={24} color="#333" />
+          <Text style={styles.menuText}>Payment Methods</Text>
+          <Ionicons name="chevron-forward" size={24} color="#ccc" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handleNotifications}>
+          <Ionicons name="notifications-outline" size={24} color="#333" />
+          <Text style={styles.menuText}>Notifications</Text>
+          <Ionicons name="chevron-forward" size={24} color="#ccc" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handleHelpSupport}>
+          <Ionicons name="help-circle-outline" size={24} color="#333" />
+          <Text style={styles.menuText}>Help & Support</Text>
+          <Ionicons name="chevron-forward" size={24} color="#ccc" />
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity 
+        style={[styles.logoutButton, loggingOut && styles.disabledButton]} 
+        onPress={handleLogout}
+        disabled={loggingOut}
+      >
+        {loggingOut ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.logoutText}>Logout</Text>
+        )}
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeContainer: { flex: 1, backgroundColor: '#fff' },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    paddingBottom: 20,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
     backgroundColor: '#fff',
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e0e0e0',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
   },
-  profileCard: {
+  userInfo: {
     backgroundColor: '#fff',
-    margin: 16,
     padding: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginTop: 10,
   },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  userName: {
+  name: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
   },
-  userEmail: {
+  email: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 20,
+    marginBottom: 5,
   },
-  section: {
+  phone: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 5,
+  },
+  menuSection: {
     backgroundColor: '#fff',
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginTop: 10,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  infoRow: {
+  menuItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  infoLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  infoValue: {
-    fontSize: 16,
-    color: '#666',
-  },
-  profileManagementButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#E0F2FE',
-    padding: 16,
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 20,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  profileManagementButtonText: {
+  menuText: {
+    flex: 1,
     fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginLeft: 10,
-  },
-  ordersButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#E0F2FE',
-    padding: 16,
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 20,
-  },
-  ordersButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginLeft: 10,
+    color: '#333',
+    marginLeft: 15,
   },
   logoutButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FF3B30',
-    padding: 16,
+    backgroundColor: '#ff3b30',
+    margin: 20,
+    padding: 15,
     borderRadius: 8,
-    margin: 16,
-    marginBottom: 32,
+    alignItems: 'center',
   },
-  logoutButtonText: {
+  logoutText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
+    fontWeight: 'bold',
   },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 32,
-  },
-  contactUsButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#E0F2FE',
-    padding: 16,
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 20,
-  },
-  contactUsButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginLeft: 10,
+  disabledButton: {
+    opacity: 0.7,
   },
 }); 

@@ -110,29 +110,23 @@ const Categories = () => {
       setError('');
       setSuccess('');
 
-      // Use FormData if iconFile is present or for new category
-      if (!editingCategory || iconFile) {
-        const formDataObj = new FormData();
-        formDataObj.append('name', formData.name);
-        formDataObj.append('description', formData.description);
-        if (iconFile) formDataObj.append('icon', iconFile);
-        let response;
-        if (editingCategory) {
-          response = await apiService.updateCategory(editingCategory._id, formDataObj);
-        } else {
-          response = await apiService.createCategory(formDataObj);
-        }
-        setSuccess(editingCategory ? 'Category updated successfully' : 'Category created successfully');
-        setOpenDialog(false);
-        fetchData();
-        setIconFile(null);
-        return;
+      // Always use FormData for consistency with backend expectations
+      const formDataObj = new FormData();
+      formDataObj.append('name', formData.name);
+      formDataObj.append('description', formData.description);
+      if (iconFile) {
+        formDataObj.append('icon', iconFile);
       }
-      // Fallback for editing without icon change
+
+      let response;
       if (editingCategory) {
-        await apiService.updateCategory(editingCategory._id, formData);
+        response = await apiService.updateCategory(editingCategory._id, formDataObj);
         setSuccess('Category updated successfully');
+      } else {
+        response = await apiService.createCategory(formDataObj);
+        setSuccess('Category created successfully');
       }
+      
       setOpenDialog(false);
       fetchData();
       setIconFile(null);
@@ -147,7 +141,36 @@ const Categories = () => {
   const getIconUrl = (icon) => {
     if (!icon) return null;
     if (icon.startsWith('http')) return icon;
-    return `${process.env.REACT_APP_API_URL || 'http://localhost:3001'}${icon}`;
+    // If the path already starts with /api/, construct the full URL correctly
+    if (icon.startsWith('/api/')) {
+      const baseUrl = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001';
+      // Remove /api from the base URL if it exists, then add the icon path
+      const cleanBaseUrl = baseUrl.replace(/\/api$/, '');
+      return `${cleanBaseUrl}${icon}`;
+    }
+    // For other paths, prepend the base URL
+    return `${process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001'}${icon}`;
+  };
+
+  const handleImageUpload = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const baseUrl = process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001';
+      const response = await fetch(`${baseUrl}/api/upload/category`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return `${process.env.REACT_APP_API_URL || 'http://10.0.0.74:3001'}${data.icon}`;
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+    }
+    return null;
   };
 
   const columns = [
@@ -264,9 +287,9 @@ const Categories = () => {
           {editingCategory ? 'Edit Category' : 'Add New Category'}
         </DialogTitle>
         <DialogContent sx={{ p: 4, maxHeight: 'calc(90vh - 140px)', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
-          <Grid container spacing={3} direction="column" sx={{ mt: 2 }}>
+          <Grid columns={12} spacing={3} direction="column" sx={{ mt: 2 }}>
             {/* Category Name */}
-            <Grid item xs={12}>
+            <Grid columnSpan={12}>
               <TextField
                 fullWidth
                 label="Category Name"
@@ -291,7 +314,7 @@ const Categories = () => {
               />
             </Grid>
             {/* Description */}
-            <Grid item xs={12}>
+            <Grid columnSpan={12}>
               <TextField
                 fullWidth
                 label="Description"
@@ -317,7 +340,7 @@ const Categories = () => {
               />
             </Grid>
             {/* Icon Upload Section */}
-            <Grid item xs={12}>
+            <Grid columnSpan={12}>
               <Box sx={{
                 p: 3,
                 backgroundColor: 'white',
