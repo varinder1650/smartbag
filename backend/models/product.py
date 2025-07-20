@@ -1,5 +1,5 @@
 from typing import List, Optional, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, validator
 from .base import BaseDocument, validate_object_id
 
 class CategoryRef(BaseModel):
@@ -35,7 +35,7 @@ class ProductUpdate(BaseModel):
     is_active: Optional[bool] = None
     keywords: Optional[List[str]] = Field(None, description="Keywords/tags for product search")
 
-    @field_validator('category', 'brand')
+    @validator('category', 'brand')
     @classmethod
     def validate_object_ids(cls, v):
         if v is not None:

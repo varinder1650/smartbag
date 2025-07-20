@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, validator
 from bson import ObjectId
 
 def validate_object_id(v) -> str:

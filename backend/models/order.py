@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, validator, model_validator
 from .base import BaseDocument, validate_object_id
 from datetime import datetime
 from bson import ObjectId
@@ -9,7 +9,7 @@ class OrderItem(BaseModel):
     quantity: int = Field(..., gt=0)
     price: float = Field(..., gt=0)
 
-    @field_validator('product')
+    @validator('product')
     @classmethod
     def validate_product_id(cls, v):
         return validate_object_id(v)
@@ -50,7 +50,7 @@ class OrderBase(BaseModel):
     status_change_history: List[StatusChange] = []
     delivery_partner: Optional[str] = None
 
-    @field_validator('user')
+    @validator('user')
     @classmethod
     def validate_user_id(cls, v):
         return validate_object_id(v)
@@ -87,7 +87,7 @@ class OrderResponse(BaseModel):
     delivery_partner: Optional[str] = None
     delivery_partner_info: Optional[UserInfo] = None
 
-    @field_validator('user')
+    @validator('user')
     @classmethod
     def validate_user_id(cls, v):
         return validate_object_id(v)
@@ -142,7 +142,7 @@ class OrderResponseEnhanced(BaseModel):
     delivery_partner: Optional[str] = None
     delivery_partner_info: Optional[UserInfo] = None
 
-    @field_validator('user')
+    @validator('user')
     @classmethod
     def validate_user_id(cls, v):
         return validate_object_id(v)

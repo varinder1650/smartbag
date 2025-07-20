@@ -1,12 +1,12 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, validator
 from .base import BaseDocument, validate_object_id
 
 class CartItem(BaseModel):
     product: str
     quantity: int = Field(..., gt=0)
 
-    @field_validator('product')
+    @validator('product')
     @classmethod
     def validate_product_id(cls, v):
         return validate_object_id(v)
@@ -18,7 +18,7 @@ class CartBase(BaseModel):
     user: str
     items: List[CartItem] = []
 
-    @field_validator('user')
+    @validator('user')
     @classmethod
     def validate_user_id(cls, v):
         return validate_object_id(v)
