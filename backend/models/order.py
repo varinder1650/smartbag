@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator, model_validator
+from pydantic import BaseModel, Field, validator, root_validator
 from .base import BaseDocument, validate_object_id
 from datetime import datetime
 from bson import ObjectId
@@ -92,7 +92,7 @@ class OrderResponse(BaseModel):
     def validate_user_id(cls, v):
         return validate_object_id(v)
 
-    @model_validator(mode='before')
+    @root_validator(pre=True)
     @classmethod
     def convert_object_ids(cls, data):
         if isinstance(data, dict):
@@ -147,7 +147,7 @@ class OrderResponseEnhanced(BaseModel):
     def validate_user_id(cls, v):
         return validate_object_id(v)
 
-    @model_validator(mode='before')
+    @root_validator(pre=True)
     @classmethod
     def convert_object_ids(cls, data):
         if isinstance(data, dict):
