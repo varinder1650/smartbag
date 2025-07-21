@@ -55,7 +55,7 @@ const Categories = () => {
 
       const filteredCategories = safeCategories.filter(cat => cat._id);
       
-      setCategories(safeCategories);
+      setCategories(filteredCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
       const errorResult = handleApiError(error);
