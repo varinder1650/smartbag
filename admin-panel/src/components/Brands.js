@@ -48,7 +48,7 @@ const Brands = () => {
       const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
 
       setBrands(
-        data.filter(row => row._id)
+        safeBrands.filter(row => row._id)
       );
       
       setBrands(safeBrands);
