@@ -52,6 +52,8 @@ const Categories = () => {
       const response = await apiService.getCategories();
       const categoriesArray = extractData(response);
       const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
+
+      const filteredCategories = safeCategories.filter(cat => cat._id);
       
       setCategories(safeCategories);
     } catch (error) {
