@@ -65,7 +65,7 @@ const Orders = () => {
     fetchData();
     fetchUsers();
   }, []);
-
+  
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -74,9 +74,10 @@ const Orders = () => {
       const response = await apiService.getOrders();
       const ordersArray = extractData(response);
       const safeOrders = Array.isArray(ordersArray) ? ordersArray : [];
+      const filteredOrders = safeOrders.filter(order => order._id);
       
       // Flatten user fields for DataGrid and ensure all fields are properly mapped
-      const mappedOrders = safeOrders.map(order => ({
+      const mappedOrders = filteredOrders.map(order => ({
         ...order,
         id: order._id, // Ensure DataGrid has a proper id field
         // User information from user_info field
@@ -98,10 +99,6 @@ const Orders = () => {
         status: order.order_status || 'pending',
         items: order.items || []
       }));
-
-      setOrders(
-        safeOrders.filter(row => row._id)
-      );
       
       setOrders(mappedOrders);
     } catch (error) {
