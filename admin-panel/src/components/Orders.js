@@ -100,7 +100,7 @@ const Orders = () => {
       }));
 
       setOrders(
-        data.filter(row => row._id)
+        safeOrders.filter(row => row._id)
       );
       
       setOrders(mappedOrders);
