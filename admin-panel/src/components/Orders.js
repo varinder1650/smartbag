@@ -98,6 +98,10 @@ const Orders = () => {
         status: order.order_status || 'pending',
         items: order.items || []
       }));
+
+      setOrders(
+        data.filter(row => row._id)
+      );
       
       setOrders(mappedOrders);
     } catch (error) {
