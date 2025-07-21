@@ -47,11 +47,8 @@ const Brands = () => {
       const brandsArray = extractData(response);
       const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
 
-      setBrands(
-        safeBrands.filter(row => row._id)
-      );
+      setBrands(safeBrands.filter(brand => brand._id));
       
-      setBrands(safeBrands);
     } catch (error) {
       console.error('Error fetching brands:', error);
       const errorResult = handleApiError(error);
