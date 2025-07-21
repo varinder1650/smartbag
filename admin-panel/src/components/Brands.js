@@ -46,6 +46,10 @@ const Brands = () => {
       const response = await apiService.getBrands();
       const brandsArray = extractData(response);
       const safeBrands = Array.isArray(brandsArray) ? brandsArray : [];
+
+      setBrands(
+        data.filter(row => row._id)
+      );
       
       setBrands(safeBrands);
     } catch (error) {
