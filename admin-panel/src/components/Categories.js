@@ -257,7 +257,8 @@ const Categories = () => {
         rowsPerPageOptions={[10, 25, 50]}
         disableSelectionOnClick
         autoHeight
-        getRowId={(row) => row._id}
+        // getRowId={(row) => row._id}
+        getRowId={(row) => row.id}
       />
 
       {/* Add/Edit Dialog */}
