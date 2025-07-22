@@ -72,7 +72,7 @@ async def test_login():
         print(f"Login status: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
-            print(f"Login successful: {data.get('user', {}).get('email')}")
+            # print(f"Login successful: {data.get('user', {}).get('email')}")
             return data.get('access_token')
         return None
 

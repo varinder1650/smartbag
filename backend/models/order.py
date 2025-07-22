@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, validator, root_validator
 from .base import BaseDocument, validate_object_id
 from datetime import datetime
 from bson import ObjectId
+from models.product import ProductResponse
 
 class OrderItem(BaseModel):
     product: str
@@ -71,7 +72,7 @@ class OrderResponse(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
     user: str
     user_info: Optional[UserInfo] = None
-    items: List[OrderItem]
+    items: List[OrderItemResponse]
     delivery_address: DeliveryAddress
     payment_method: str = "cod"
     subtotal: float = Field(..., gt=0)

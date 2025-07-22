@@ -39,11 +39,9 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
-    console.log('Token in localStorage:', token);
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      console.log('Authorization header set:', axios.defaults.headers.common['Authorization']);
       // Verify token is still valid
       checkAuthStatus();
     } else {

@@ -9,6 +9,7 @@ from models.order import OrderCreate, OrderUpdate, OrderResponse, OrderResponseE
 from utils.database import DatabaseManager, get_database
 from utils.auth import get_current_active_user
 from models.user import UserInDB
+from models.product import ProductResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -319,40 +320,88 @@ async def get_orders(
                         }
             # Populate product details for each item
             for item in order.get("items", []):
-                product_id = item.get("product")
-                if product_id:
+                product_data = item.get("product")
+                if isinstance(product_data, str):
                     try:
-                        product_obj_id = ObjectId(product_id) if isinstance(product_id, str) else product_id
+                        product_obj_id = ObjectId(product_data)
                         product = await db.find_one("products", {"_id": product_obj_id})
                         if product:
-                            # Fetch brand information
-                            brand_name = "Unknown"
-                            if product.get("brand"):
-                                try:
-                                    brand_obj_id = ObjectId(product["brand"]) if isinstance(product["brand"], str) else product["brand"]
-                                    brand = await db.find_one("brands", {"_id": brand_obj_id})
-                                    if brand:
-                                        brand_name = brand.get("name", "Unknown")
-                                except Exception:
-                                    brand_name = "Unknown"
-                            
-                            item["product"] = {
-                                "_id": str(product["_id"]),
-                                "name": product.get("name", "Unknown"),
-                                "price": product.get("price", 0),
-                                "images": product.get("images", []),
-                                "brand": {"name": brand_name}
-                            }
+                            # Convert all ObjectIds to strings
+                            product["_id"] = str(product["_id"])
+                            # Category
+                            if isinstance(product.get("category"), ObjectId):
+                                cat_obj = await db.find_one("categories", {"_id": product["category"]})
+                                if cat_obj:
+                                    product["category"] = {"_id": str(cat_obj["_id"]), "name": cat_obj.get("name", "Unknown Category")}
+                                else:
+                                    product["category"] = {"_id": "000000000000000000000000", "name": "Unknown Category"}
+                            elif isinstance(product.get("category"), dict):
+                                # Ensure _id is string
+                                product["category"]["_id"] = str(product["category"].get("_id", "000000000000000000000000"))
+                            # Brand
+                            if isinstance(product.get("brand"), ObjectId):
+                                brand_obj = await db.find_one("brands", {"_id": product["brand"]})
+                                if brand_obj:
+                                    product["brand"] = {"_id": str(brand_obj["_id"]), "name": brand_obj.get("name", "Unknown Brand")}
+                                else:
+                                    product["brand"] = {"_id": "000000000000000000000000", "name": "Unknown Brand"}
+                            elif isinstance(product.get("brand"), dict):
+                                # Ensure _id is string
+                                product["brand"]["_id"] = str(product["brand"].get("_id", "000000000000000000000000"))
+                            item["product"] = ProductResponse(**product).dict(by_alias=True)
+                        else:
+                            # fallback as before
+                            item["product"] = ProductResponse(
+                                _id="000000000000000000000000",
+                                name="Unknown Product",
+                                description="No description available",
+                                price=1,
+                                images=[],
+                                category={"_id": "000000000000000000000000", "name": "Unknown Category"},
+                                brand={"_id": "000000000000000000000000", "name": "Unknown Brand"},
+                                stock=0,
+                                is_active=False,
+                                keywords=[]
+                            ).dict(by_alias=True)
                     except Exception as e:
                         logger.error(f"Error populating product details: {e}")
-                        # Set default product structure if lookup fails
-                        item["product"] = {
-                            "_id": str(product_id),
-                            "name": "Product not available",
-                            "price": item.get("price", 0),
-                            "images": [],
-                            "brand": {"name": "Unknown"}
-                        }
+                        item["product"] = ProductResponse(
+                            _id="000000000000000000000000",
+                            name="Unknown Product",
+                            description="No description available",
+                            price=1,
+                            images=[],
+                            category={"_id": "000000000000000000000000", "name": "Unknown Category"},
+                            brand={"_id": "000000000000000000000000", "name": "Unknown Brand"},
+                            stock=0,
+                            is_active=False,
+                            keywords=[]
+                        ).dict(by_alias=True)
+                elif isinstance(product_data, dict):
+                    # Already a dict, ensure _id, category, and brand are strings and dicts
+                    if "_id" in product_data and isinstance(product_data["_id"], ObjectId):
+                        product_data["_id"] = str(product_data["_id"])
+                    if "category" in product_data:
+                        if isinstance(product_data["category"], ObjectId):
+                            cat_obj = await db.find_one("categories", {"_id": product_data["category"]})
+                            if cat_obj:
+                                product_data["category"] = {"_id": str(cat_obj["_id"]), "name": cat_obj.get("name", "Unknown Category")}
+                            else:
+                                product_data["category"] = {"_id": "000000000000000000000000", "name": "Unknown Category"}
+                        elif isinstance(product_data["category"], dict):
+                            product_data["category"]["_id"] = str(product_data["category"].get("_id", "000000000000000000000000"))
+                    if "brand" in product_data:
+                        if isinstance(product_data["brand"], ObjectId):
+                            brand_obj = await db.find_one("brands", {"_id": product_data["brand"]})
+                            if brand_obj:
+                                product_data["brand"] = {"_id": str(brand_obj["_id"]), "name": brand_obj.get("name", "Unknown Brand")}
+                            else:
+                                product_data["brand"] = {"_id": "000000000000000000000000", "name": "Unknown Brand"}
+                        elif isinstance(product_data["brand"], dict):
+                            product_data["brand"]["_id"] = str(product_data["brand"].get("_id", "000000000000000000000000"))
+                    # Now re-validate as ProductResponse
+                    item["product"] = ProductResponse(**product_data).dict(by_alias=True)
+
             enhanced_orders.append(order)
         return [OrderResponse(**order) for order in enhanced_orders]
         
@@ -416,23 +465,47 @@ async def get_my_orders(
                                 except Exception:
                                     brand_name = "Unknown"
                             
-                            item["product"] = {
-                                "_id": str(product["_id"]),
-                                "name": product.get("name", "Unknown"),
-                                "price": product.get("price", 0),
-                                "images": product.get("images", []),
-                                "brand": {"name": brand_name}
-                            }
+                            # item["product"] = {
+                            #     "_id": str(product["_id"]),
+                            #     "name": product.get("name", "Unknown"),
+                            #     "price": product.get("price", 0),
+                            #     "images": product.get("images", []),
+                            #     "brand": {"name": brand_name}
+                            # }
+                            item["product"] = ProductResponse(
+                                _id=str(product["_id"]),
+                                name=product.get("name", "Unknown"),
+                                description=product.get("description", "No description"),
+                                price=product.get("price", 0),
+                                images=product.get("images", []),
+                                category={"_id": str(product.get("category", "000000000000000000000000")), "name": "Unknown Category"},
+                                brand={"_id": str(product.get("brand", "000000000000000000000000")), "name": brand_name},
+                                stock=product.get("stock", 0),
+                                is_active=product.get("is_active", True),
+                                keywords=product.get("keywords", [])
+                            ).dict(by_alias=True)
                     except Exception as e:
                         logger.error(f"Error populating product details: {e}")
                         # Set default product structure if lookup fails
-                        item["product"] = {
-                            "_id": str(product_id),
-                            "name": "Product not available",
-                            "price": item.get("price", 0),
-                            "images": [],
-                            "brand": {"name": "Unknown"}
-                        }
+                        # item["product"] = {
+                        #     "_id": str(product_id),
+                        #     "name": "Product not available",
+                        #     "price": item.get("price", 0),
+                        #     "images": [],
+                        #     "brand": {"name": "Unknown"}
+                        # }
+                        item["product"] = ProductResponse(
+                            _id=str(product["_id"]),
+                            name=product.get("name", "Unknown"),
+                            description=product.get("description", "No description"),
+                            price=product.get("price", 0),
+                            images=product.get("images", []),
+                            category={"_id": str(product.get("category", "000000000000000000000000")), "name": "Unknown Category"},
+                            brand={"_id": str(product.get("brand", "000000000000000000000000")), "name": brand_name},
+                            stock=product.get("stock", 0),
+                            is_active=product.get("is_active", True),
+                            keywords=product.get("keywords", [])
+                        ).dict(by_alias=True)
             
             enhanced_orders.append(order)
         
@@ -537,6 +610,7 @@ async def update_order_status(
 ):
     """Update order status (admin only) and assign delivery partner if provided"""
     try:
+        logger.info(f"Status update payload: {status_update}")
         if current_user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -568,11 +642,13 @@ async def update_order_status(
         order["status_change_history"].append(status_change)
         update_dict = {
             "order_status": new_status,
-            "status_change_history": order["status_change_history"]
+            "status_change_history": order["status_change_history"],
+            "updated_at": datetime.utcnow()
         }
         # Assign delivery partner if provided
         if "delivery_partner" in status_update:
             update_dict["delivery_partner"] = status_update["delivery_partner"]
+        logger.info(f"Mongo update dict: {update_dict}")
         success = await db.update_one(
             "orders",
             {"_id": ObjectId(order_id)},
@@ -618,6 +694,84 @@ async def update_order_status(
                         "email": partner.get("email", "N/A"),
                         "phone": partner.get("phone", "N/A")
                     }
+        # Normalize product, category, and brand fields for all items
+        for item in updated_order.get("items", []):
+            product_data = item.get("product")
+            if isinstance(product_data, str):
+                try:
+                    product_obj_id = ObjectId(product_data)
+                    product = await db.find_one("products", {"_id": product_obj_id})
+                    if product:
+                        product["_id"] = str(product["_id"])
+                        # Category
+                        if isinstance(product.get("category"), ObjectId):
+                            cat_obj = await db.find_one("categories", {"_id": product["category"]})
+                            if cat_obj:
+                                product["category"] = {"_id": str(cat_obj["_id"]), "name": cat_obj.get("name", "Unknown Category")}
+                            else:
+                                product["category"] = {"_id": "000000000000000000000000", "name": "Unknown Category"}
+                        elif isinstance(product.get("category"), dict):
+                            product["category"]["_id"] = str(product["category"].get("_id", "000000000000000000000000"))
+                        # Brand
+                        if isinstance(product.get("brand"), ObjectId):
+                            brand_obj = await db.find_one("brands", {"_id": product["brand"]})
+                            if brand_obj:
+                                product["brand"] = {"_id": str(brand_obj["_id"]), "name": brand_obj.get("name", "Unknown Brand")}
+                            else:
+                                product["brand"] = {"_id": "000000000000000000000000", "name": "Unknown Brand"}
+                        elif isinstance(product.get("brand"), dict):
+                            product["brand"]["_id"] = str(product["brand"].get("_id", "000000000000000000000000"))
+                        item["product"] = ProductResponse(**product).dict(by_alias=True)
+                    else:
+                        item["product"] = ProductResponse(
+                            _id="000000000000000000000000",
+                            name="Unknown Product",
+                            description="No description available",
+                            price=1,
+                            images=[],
+                            category={"_id": "000000000000000000000000", "name": "Unknown Category"},
+                            brand={"_id": "000000000000000000000000", "name": "Unknown Brand"},
+                            stock=0,
+                            is_active=False,
+                            keywords=[]
+                        ).dict(by_alias=True)
+                except Exception as e:
+                    logger.error(f"Error normalizing product details in update_order_status: {e}")
+                    item["product"] = ProductResponse(
+                        _id="000000000000000000000000",
+                        name="Unknown Product",
+                        description="No description available",
+                        price=1,
+                        images=[],
+                        category={"_id": "000000000000000000000000", "name": "Unknown Category"},
+                        brand={"_id": "000000000000000000000000", "name": "Unknown Brand"},
+                        stock=0,
+                        is_active=False,
+                        keywords=[]
+                    ).dict(by_alias=True)
+            elif isinstance(product_data, dict):
+                if "_id" in product_data and isinstance(product_data["_id"], ObjectId):
+                    product_data["_id"] = str(product_data["_id"])
+                if "category" in product_data:
+                    if isinstance(product_data["category"], ObjectId):
+                        cat_obj = await db.find_one("categories", {"_id": product_data["category"]})
+                        if cat_obj:
+                            product_data["category"] = {"_id": str(cat_obj["_id"]), "name": cat_obj.get("name", "Unknown Category")}
+                        else:
+                            product_data["category"] = {"_id": "000000000000000000000000", "name": "Unknown Category"}
+                    elif isinstance(product_data["category"], dict):
+                        product_data["category"]["_id"] = str(product_data["category"].get("_id", "000000000000000000000000"))
+                if "brand" in product_data:
+                    if isinstance(product_data["brand"], ObjectId):
+                        brand_obj = await db.find_one("brands", {"_id": product_data["brand"]})
+                        if brand_obj:
+                            product_data["brand"] = {"_id": str(brand_obj["_id"]), "name": brand_obj.get("name", "Unknown Brand")}
+                        else:
+                            product_data["brand"] = {"_id": "000000000000000000000000", "name": "Unknown Brand"}
+                    elif isinstance(product_data["brand"], dict):
+                        product_data["brand"]["_id"] = str(product_data["brand"].get("_id", "000000000000000000000000"))
+                item["product"] = ProductResponse(**product_data).dict(by_alias=True)
+
         return OrderResponse(**updated_order)
         
     except HTTPException:

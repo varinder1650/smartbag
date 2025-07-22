@@ -34,6 +34,7 @@ const Categories = () => {
   const [submitting, setSubmitting] = useState(false);
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [iconFile, setIconFile] = useState(null);
+  const [cloudinaryConfig, setCloudinaryConfig] = useState({ cloudName: '', uploadPreset: '' });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -42,6 +43,16 @@ const Categories = () => {
 
   useEffect(() => {
     fetchData();
+    // Fetch Cloudinary credentials from backend settings
+    // fetch((process.env.REACT_APP_API_URL || 'http://localhost:3001/api') + '/settings/public')
+    //   .then(res => res.json())
+    //   .then(data => {
+    //     setCloudinaryConfig({
+    //       cloudName: data.cloudinaryCloudName || '',
+    //       uploadPreset: data.cloudinaryUploadPreset || ''
+    //     });
+    //   })
+    //   .catch(() => setCloudinaryConfig({ cloudName: '', uploadPreset: '' }));
   }, []);
 
   const fetchData = async () => {
@@ -54,7 +65,7 @@ const Categories = () => {
       const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
 
       const filteredCategories = safeCategories.filter(cat => cat._id);
-      
+      // console.log(filteredCategories);
       setCategories(filteredCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -105,6 +116,20 @@ const Categories = () => {
     const file = event.target.files[0];
     if (file) setIconFile(file);
   };
+
+  // Add Cloudinary upload utility
+  // const uploadToCloudinary = async (file) => {
+  //   const data = new FormData();
+  //   data.append('file', file);
+  //   data.append('upload_preset', process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET);
+  //   data.append('cloud_name', process.env.REACT_APP_CLOUDINARY_CLOUD_NAME);
+  //   const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+  //     method: 'POST',
+  //     body: data,
+  //   });
+  //   const json = await res.json();
+  //   return json.secure_url;
+  // };
 
   const handleSubmit = async () => {
     try {
@@ -257,8 +282,8 @@ const Categories = () => {
         rowsPerPageOptions={[10, 25, 50]}
         disableSelectionOnClick
         autoHeight
-        // getRowId={(row) => row._id}
-        getRowId={(row) => row.id}
+        getRowId={(row) => row._id}
+        // getRowId={(row) => row.id}
       />
 
       {/* Add/Edit Dialog */}

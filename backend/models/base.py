@@ -6,8 +6,14 @@ from bson import ObjectId
 def validate_object_id(v) -> str:
     if isinstance(v, ObjectId):
         return str(v)
-    if isinstance(v, str) and ObjectId.is_valid(v):
-        return v
+    # if isinstance(v, str) and ObjectId.is_valid(v):
+    #     return v
+    if isinstance(v, str):
+        # Accept any 24-character hex string (for dummy/fallback IDs)
+        if len(v) == 24 and all(c in "0123456789abcdefABCDEF" for c in v):
+            return v
+        if ObjectId.is_valid(v):
+            return v
     raise ValueError("Invalid ObjectId")
 
 class BaseDocument(BaseModel):

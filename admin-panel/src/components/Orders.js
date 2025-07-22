@@ -57,6 +57,7 @@ const Orders = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [users, setUsers] = useState([]); // For delivery partner selection
   const [search, setSearch] = useState('');
+  // Filtered orders should be based on orders state, which has the correct id field
   const filteredOrders = orders.filter(order =>
     order._id && order._id.toLowerCase().includes(search.toLowerCase())
   );
@@ -76,10 +77,12 @@ const Orders = () => {
       const safeOrders = Array.isArray(ordersArray) ? ordersArray : [];
       const filteredOrders = safeOrders.filter(order => order._id);
       
+      // Debug: log the raw orders to inspect date fields
+      console.log('Fetched orders:', filteredOrders);
       // Flatten user fields for DataGrid and ensure all fields are properly mapped
       const mappedOrders = filteredOrders.map(order => ({
         ...order,
-        id: order._id, // Ensure DataGrid has a proper id field
+        id: String(order._id), // Ensure DataGrid has a proper id field and is always a string
         // User information from user_info field
         customerName: order.user_info?.name || order.user || 'N/A',
         customerEmail: order.user_info?.email || 'N/A',
@@ -94,13 +97,14 @@ const Orders = () => {
         // Ensure these fields are properly set - note the field names
         totalAmount: order.total_amount || 0,
         paymentMethod: order.payment_method || 'N/A',
-        createdAt: order.created_at || order.createdAt || '',
+        createdAt: order.created_at,
         updatedAt: order.updated_at,
         status: order.order_status || 'pending',
         items: order.items || []
       }));
       
       setOrders(mappedOrders);
+      console.log('Mapped orders for DataGrid:', mappedOrders);
     } catch (error) {
       console.error('Error fetching orders:', error);
       const errorResult = handleApiError(error);
@@ -123,7 +127,7 @@ const Orders = () => {
   const handleEdit = (order) => {
     setEditingOrder(order);
     setEditStatus(order.status);
-    setEditPartner(order.delivery_partner || '');
+    setEditPartner(order.delivery_partner ? String(order.delivery_partner) : ''); // Always a string
     setEditDialogOpen(true);
   };
 
@@ -220,14 +224,21 @@ const Orders = () => {
     if (!dateString) return 'N/A';
     try {
       const date = new Date(dateString);
-      return date.toLocaleString('en-US', {
+      if (isNaN(date.getTime())) {
+        console.log('formatDateTime: Invalid date', dateString);
+        return 'N/A';
+      }
+      const formatted = date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
       });
+      console.log('formatDateTime:', dateString, '->', formatted);
+      return formatted;
     } catch (error) {
+      console.log('formatDateTime: Error', dateString, error);
       return 'N/A';
     }
   };
@@ -268,7 +279,14 @@ const Orders = () => {
       field: 'createdAt',
       headerName: 'Order Date',
       width: 180,
-      valueGetter: (params) => formatDateTime(params.value),
+      valueGetter: (params) => {
+        if (!params.row) {
+          console.log('Order Date valueGetter: params.row is undefined');
+          return 'N/A';
+        }
+        console.log('Order Date valueGetter:', params.row._id, params.row.createdAt);
+        return formatDateTime(params.row.createdAt);
+      },
     },
     {
       field: 'assignedTo',
@@ -297,6 +315,10 @@ const Orders = () => {
       ),
     },
   ];
+
+  // Remove debug log before DataGrid render
+  // console.log('Rendering DataGrid with rows:', filteredOrders);
+  // console.log('Rendering DataGrid with columns:', columns);
 
   if (loading) {
     return (
@@ -338,7 +360,7 @@ const Orders = () => {
         rowsPerPageOptions={[10, 25, 50]}
         disableSelectionOnClick
         autoHeight
-        getRowId={(row) => row._id || row.id}
+        getRowId={(row) => row.id}
         rowHeight={60}
         sx={{
           '& .MuiDataGrid-cell': {
@@ -459,13 +481,13 @@ const Orders = () => {
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Delivery Partner</InputLabel>
             <Select
-              value={editPartner}
+              value={editPartner !== undefined && editPartner !== null ? String(editPartner) : ''}
               label="Delivery Partner"
               onChange={e => setEditPartner(e.target.value)}
             >
               <MenuItem value="">Unassigned</MenuItem>
               {users.filter(u => u.role === 'partner').map(u => (
-                <MenuItem key={u.id} value={u.id}>{u.name} ({u.email})</MenuItem>
+                <MenuItem key={u._id} value={u._id}>{u.name} ({u.email})</MenuItem>
               ))}
             </Select>
           </FormControl>

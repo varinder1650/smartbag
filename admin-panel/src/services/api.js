@@ -94,7 +94,8 @@ export const apiService = {
     const timestamp = Date.now();
     return api.get(`/orders?_t=${timestamp}`, { params });
   },
-  updateOrderStatus: (id, status, delivery_partner) => api.put(`/orders/${id}/status`, { status, ...(delivery_partner && { delivery_partner }) }),
+  updateOrderStatus: (id, status, delivery_partner) =>
+    api.put(`/orders/${id}/status`, { status, delivery_partner: delivery_partner || null }),
   deleteOrder: (id) => api.delete(`/orders/${id}`),
 
   // Settings
