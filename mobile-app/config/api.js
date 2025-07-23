@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'http://10.0.0.74:3001/api';
+export const API_BASE_URL = 'https://smartbag.onrender.com/api/';
 
 // API Endpoints
 export const ENDPOINTS = {

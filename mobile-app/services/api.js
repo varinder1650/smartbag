@@ -1,19 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Force use of localhost for development
-const getApiUrl = () => {
-  // Use computer's IP address for React Native development
-  return 'http://10.0.0.74:3001/api';
-};
+import { API_BASE_URL, API_ENDPOINTS, axiosConfig } from '../config/apiConfig';
 
 // Create axios instance
-const api = axios.create({
-  baseURL: getApiUrl(),
-  timeout: 15000, // Increased timeout
-});
+const api = axios.create(axiosConfig);
 
-console.log('🔗 API Base URL:', getApiUrl());
+console.log('🔗 API Base URL (from services/api.js):', API_BASE_URL);
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
@@ -45,7 +37,10 @@ api.interceptors.response.use(
 // Auth APIs
 export const login = async (credentials) => {
   try {
-    const response = await api.post('/auth/login', credentials);
+    // Use API_ENDPOINTS.LOGIN instead of constructing URL manually
+    const response = await axios.post(API_ENDPOINTS.LOGIN, credentials, {
+      headers: api.defaults.headers
+    });
     return response.data;
   } catch (error) {
     throw error;
@@ -54,7 +49,10 @@ export const login = async (credentials) => {
 
 export const register = async (userData) => {
   try {
-    const response = await api.post('/auth/register', userData);
+    // Use API_ENDPOINTS.REGISTER instead of constructing URL manually
+    const response = await axios.post(API_ENDPOINTS.REGISTER, userData, {
+      headers: api.defaults.headers
+    });
     return response.data;
   } catch (error) {
     throw error;
@@ -64,7 +62,7 @@ export const register = async (userData) => {
 // Product APIs
 export const getProducts = async (params = {}) => {
   try {
-    const response = await api.get('/products', { params });
+    const response = await api.get(API_ENDPOINTS.PRODUCTS, { params });
     return response.data;
   } catch (error) {
     throw error;
@@ -73,7 +71,7 @@ export const getProducts = async (params = {}) => {
 
 export const getProduct = async (id) => {
   try {
-    const response = await api.get(`/products/${id}`);
+    const response = await api.get(API_ENDPOINTS.PRODUCT_BY_ID(id));
     return response.data;
   } catch (error) {
     throw error;
@@ -83,7 +81,7 @@ export const getProduct = async (id) => {
 // Category APIs
 export const getCategories = async () => {
   try {
-    const response = await api.get('/categories');
+    const response = await api.get(API_ENDPOINTS.CATEGORIES);
     return response.data;
   } catch (error) {
     throw error;
@@ -93,7 +91,7 @@ export const getCategories = async () => {
 // Brand APIs
 export const getBrands = async () => {
   try {
-    const response = await api.get('/brands');
+    const response = await api.get(API_ENDPOINTS.BRANDS);
     return response.data;
   } catch (error) {
     throw error;
@@ -103,7 +101,7 @@ export const getBrands = async () => {
 // Cart APIs
 export const getCart = async () => {
   try {
-    const response = await api.get('/cart');
+    const response = await api.get(API_ENDPOINTS.CART);
     return response.data;
   } catch (error) {
     throw error;
@@ -112,16 +110,7 @@ export const getCart = async () => {
 
 export const addToCart = async (productId, quantity = 1) => {
   try {
-    const response = await api.post('/cart/add', { productId, quantity });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const updateCartItem = async (productId, quantity) => {
-  try {
-    const response = await api.put('/cart/update', { productId, quantity });
+    const response = await api.post(API_ENDPOINTS.CART_ADD, { productId, quantity });
     return response.data;
   } catch (error) {
     throw error;
@@ -130,16 +119,16 @@ export const updateCartItem = async (productId, quantity) => {
 
 export const removeFromCart = async (productId) => {
   try {
-    const response = await api.delete(`/cart/remove/${productId}`);
+    const response = await api.post(API_ENDPOINTS.CART_REMOVE, { productId });
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-export const clearCart = async () => {
+export const updateCartItem = async (productId, quantity) => {
   try {
-    const response = await api.delete('/cart/clear');
+    const response = await api.post(API_ENDPOINTS.CART_UPDATE, { productId, quantity });
     return response.data;
   } catch (error) {
     throw error;
@@ -147,84 +136,61 @@ export const clearCart = async () => {
 };
 
 // Order APIs
+export const getOrders = async () => {
+  try {
+    const response = await api.get(API_ENDPOINTS.MY_ORDERS);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getOrder = async (id) => {
+  try {
+    const response = await api.get(API_ENDPOINTS.ORDER_BY_ID(id));
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const createOrder = async (orderData) => {
   try {
-    const response = await api.post('/orders', orderData);
+    const response = await api.post(API_ENDPOINTS.ORDER_CREATE, orderData);
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-export const getUserOrders = async () => {
+// Settings API
+export const getSettings = async () => {
   try {
-    const response = await api.get('/orders/my');
+    const response = await api.get(API_ENDPOINTS.SETTINGS);
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-// Address APIs
-export const validateAddress = async (address) => {
+// User Address API
+export const getUserAddress = async () => {
   try {
-    const response = await api.post('/address/validate', { address });
+    const response = await api.get(API_ENDPOINTS.USER_ADDRESS);
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-export const searchAddresses = async (query) => {
+export const updateUserAddress = async (addressData) => {
   try {
-    const response = await api.get(`/address/search?query=${encodeURIComponent(query)}`);
+    const response = await api.post(API_ENDPOINTS.USER_ADDRESS, addressData);
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-export const geocodeAddress = async (address) => {
-  try {
-    const formData = new FormData();
-    formData.append('address', address);
-    const response = await api.post('/address/geocode', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const reverseGeocode = async (latitude, longitude) => {
-  try {
-    const response = await api.post('/address/reverse-geocode', { latitude, longitude });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// User APIs
-export const getUserProfile = async () => {
-  try {
-    const response = await api.get('/user/profile');
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const updateUserProfile = async (userData) => {
-  try {
-    const response = await api.put('/user/profile', userData);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export default api; 
+// Export the api instance for direct use
+export default api;

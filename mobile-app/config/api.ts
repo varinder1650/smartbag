@@ -8,7 +8,8 @@ export const API_CONFIG = {
   ALTERNATIVE_URLS: [
     'http://10.0.0.74:3001/api',
     'http://Nitins-MacBook-Air.local:3001/api',
-    'http://localhost:3001/api'
+    'http://localhost:3001/api',
+    'https://smartbag.onrender.com/api/'
   ],
   
   // Environment variable for API URL (for production)

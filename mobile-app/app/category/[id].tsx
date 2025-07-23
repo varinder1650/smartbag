@@ -14,8 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
 
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
 const { width } = Dimensions.get('window');
 
 interface Product {
@@ -50,8 +50,8 @@ export default function CategoryProductsScreen() {
     try {
       const timestamp = Date.now();
       const [productsRes, categoriesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/products?_t=${timestamp}`),
-        fetch(`${API_BASE_URL}/categories?_t=${timestamp}`),
+        fetch(`${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`),
+        fetch(`${API_ENDPOINTS.CATEGORIES}?_t=${timestamp}`),
       ]);
       
       if (!productsRes.ok || !categoriesRes.ok) {
@@ -99,7 +99,7 @@ export default function CategoryProductsScreen() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE_URL}/cart/add`, {
+      const response = await fetch(API_ENDPOINTS.CART_ADD, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -385,4 +385,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-}); 
+});

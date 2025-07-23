@@ -16,8 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-// Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -44,11 +43,13 @@ interface SectionData {
   title?: string;
 }
 
-const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
+// IMAGE_BASE_URL is now imported from apiConfig
 
 const HomeScreen = () => {
+  console.log('HomeScreen - Component mounted');
   // Use AuthContext directly
   const { user, token, loading: authLoading } = useAuth();
+  console.log('HomeScreen - Auth state:', { user: !!user, token: !!token, authLoading });
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -87,7 +88,7 @@ const HomeScreen = () => {
     }
     
     try {
-      const response = await fetch(`${API_BASE_URL}/cart/`, {
+      const response = await fetch(API_ENDPOINTS.CART, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -137,9 +138,15 @@ const HomeScreen = () => {
       console.log('filterProducts - products:', products);
       console.log('filterProducts - filtered (initial):', filtered);
 
-      // Filter by category
+      // Filter by category (match by name or ID since categories API returns _id: null)
       if (selectedCategory) {
-        filtered = filtered.filter(product => product.category?._id === selectedCategory);
+        const selectedCat = categories.find(cat => cat._id === selectedCategory || cat.name === selectedCategory);
+        if (selectedCat) {
+          filtered = filtered.filter(product =>
+            product.category?.name === selectedCat.name ||
+            product.category?._id === selectedCat._id
+          );
+        }
         console.log('filterProducts - after category filter:', filtered);
       }
 
@@ -169,8 +176,8 @@ const HomeScreen = () => {
       console.log('fetchData - starting...');
       const timestamp = Date.now();
       const [productsRes, categoriesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/products?_t=${timestamp}`),
-        fetch(`${API_BASE_URL}/categories?_t=${timestamp}`),
+        fetch(`${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`),
+        fetch(`${API_ENDPOINTS.CATEGORIES}?_t=${timestamp}`),
       ]);
       
       if (!productsRes.ok || !categoriesRes.ok) {
@@ -263,7 +270,7 @@ const HomeScreen = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/cart/add`, {
+      const response = await fetch(API_ENDPOINTS.CART_ADD, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -347,10 +354,11 @@ const HomeScreen = () => {
           </View>
           <Text style={{ fontSize: 14, color: selectedCategory === null ? '#111' : '#888', fontWeight: selectedCategory === null ? 'bold' : 'normal' }}>All</Text>
         </TouchableOpacity>
-        {categories.map((cat) => {
+        {categories.map((cat, index) => {
           const iconUrl = getCategoryIconUrl(cat);
+          const categoryKey = cat._id || cat.name || `category-${index}`;
           return (
-            <TouchableOpacity key={cat._id} onPress={() => handleCategoryPress(cat._id)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
+            <TouchableOpacity key={categoryKey} onPress={() => handleCategoryPress(cat._id)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
               <View style={styles.categoryIconContainer}>
                 {iconUrl ? (
                   <Image
@@ -360,7 +368,7 @@ const HomeScreen = () => {
                     onError={() => {
                       console.log('Category icon failed to load for:', cat.name);
                     }}
-                    defaultSource={{ uri: 'https://via.placeholder.com/48x48' }}
+
                   />
                 ) : (
                   <Ionicons 
@@ -449,12 +457,17 @@ const HomeScreen = () => {
   };
 
   const renderCategorySection = (category: Category) => {
-    const categoryProducts = products.filter(product => product.category?._id === category._id);
-    
+    // Match by name since categories API returns _id: null
+    const categoryProducts = products.filter(product =>
+      product.category?.name === category.name ||
+      product.category?._id === category._id
+    );
+
+    console.log(`Category "${category.name}" has ${categoryProducts.length} products`);
     if (categoryProducts.length === 0) return null;
     
     return (
-      <View key={category._id} style={styles.categorySection}>
+      <View key={category._id || category.name || `category-section-${Math.random()}`} style={styles.categorySection}>
         <View style={styles.categorySectionHeader}>
           <Text style={styles.categorySectionTitle}>
             {category.name}
@@ -494,9 +507,8 @@ const HomeScreen = () => {
     <>
       {renderTopBar()}
       {renderSearchBar()}
-      {renderCategoryFilterRow()}
     </>
-  ), [userAddress, cartCount, searchQuery, selectedCategory, categories]);
+  ), [userAddress, cartCount, searchQuery]);
 
   const renderFooter = () => (
     <View style={{ height: 100 }} />
@@ -533,7 +545,7 @@ const HomeScreen = () => {
         <FlatList
           data={getMainListData()}
           renderItem={renderMainListItem}
-          keyExtractor={(item) => item._id}
+          keyExtractor={(item) => item._id || item.name || `category-${Math.random()}`}
           ListHeaderComponent={renderCategoryFilterRow}
           ListFooterComponent={renderFooter}
           showsVerticalScrollIndicator={false}

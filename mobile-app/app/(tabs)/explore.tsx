@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-// Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
+
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -54,7 +54,7 @@ const CartScreen = () => {
       if (!token) {
         // Use public cart endpoint for non-authenticated users
         const timestamp = Date.now();
-        const response = await fetch(`${API_BASE_URL}/cart/public?_t=${timestamp}`);
+        const response = await fetch(`${API_ENDPOINTS.CART}/public?_t=${timestamp}`);
         const data = await response.json();
         console.log('Public cart response:', data);
         setCartItems(data.items || []);
@@ -64,7 +64,7 @@ const CartScreen = () => {
       // Print first 20 chars of token for debugging
       console.log('Token (first 20 chars):', token ? token.substring(0, 20) : 'null');
       const timestamp = Date.now();
-      const response = await fetch(`${API_BASE_URL}/cart/?_t=${timestamp}`, {
+      const response = await fetch(`${API_ENDPOINTS.CART}?_t=${timestamp}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -94,7 +94,7 @@ const CartScreen = () => {
     try {
       if (newQuantity <= 0) {
         // Remove item
-        const response = await fetch(`${API_BASE_URL}/cart/remove`, {
+        const response = await fetch(API_ENDPOINTS.CART_REMOVE, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -106,7 +106,7 @@ const CartScreen = () => {
         }
       } else {
         // Update quantity
-        const response = await fetch(`${API_BASE_URL}/cart/update`, {
+        const response = await fetch(API_ENDPOINTS.CART_UPDATE, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ const CartScreen = () => {
 
   const placeOrder = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/orders`, {
+      const response = await fetch(API_ENDPOINTS.ORDERS, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

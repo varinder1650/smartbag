@@ -4,8 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../config/apiConfig';
 
 // Define the Order type
 interface Order {
@@ -42,13 +41,13 @@ const DeliveryScreen = () => {
     try {
       // Fetch all orders relevant to the partner
       const [availableRes, assignedRes, deliveredRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/orders/available-for-assignment`, {
+        fetch(API_ENDPOINTS.AVAILABLE_ORDERS, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_BASE_URL}/orders/assigned-to-partner`, {
+        fetch(API_ENDPOINTS.ASSIGNED_ORDERS, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_BASE_URL}/orders/delivered-by-partner`, {
+        fetch(API_ENDPOINTS.DELIVERED_ORDERS, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -186,4 +185,4 @@ const styles = StyleSheet.create({
   closeButton: { position: 'absolute', top: 8, right: 8, backgroundColor: '#007AFF', borderRadius: 16, padding: 4 },
 });
 
-export default DeliveryScreen; 
+export default DeliveryScreen;

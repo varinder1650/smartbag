@@ -16,8 +16,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 
 export default function LoginScreen() {
-  const [emailOrPhone, setEmailOrPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const [emailOrPhone, setEmailOrPhone] = useState('nitingoyal3150@gmail.com');
+  const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 

@@ -7,7 +7,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { Platform } from 'react-native';
+// Dynamically import MapView and Marker
+let MapView;
+let Marker;
+if (Platform.OS !== 'web') {
+  MapView = require('react-native-maps').default;
+  Marker = require('react-native-maps').Marker;
+}
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { reverseGeocode } from '../services/api';
@@ -21,6 +28,7 @@ const AddressMapPicker = ({ onAddressSelect, initialLocation = null }) => {
   const mapRef = useRef(null);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     getCurrentLocation();
   }, []);
 
@@ -241,26 +249,28 @@ const AddressMapPicker = ({ onAddressSelect, initialLocation = null }) => {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={{
-          ...location,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
-        onPress={handleMapPress}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-      >
-        {selectedLocation && (
-          <Marker
-            coordinate={selectedLocation}
-            title="Selected Location"
-            description={address}
-          />
-        )}
-      </MapView>
+      {Platform.OS !== 'web' && MapView && Marker && (
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={{
+            ...location,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }}
+          onPress={handleMapPress}
+          showsUserLocation={true}
+          showsMyLocationButton={true}
+        >
+          {selectedLocation && (
+            <Marker
+              coordinate={selectedLocation}
+              title="Selected Location"
+              description={address}
+            />
+          )}
+        </MapView>
+      )}
       
       <View style={styles.addressContainer}>
         <Text style={styles.addressLabel}>Selected Address:</Text>
@@ -296,6 +306,8 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+    height: Platform.OS === 'web' ? 0 : undefined,
+  
   },
   loadingContainer: {
     flex: 1,
@@ -396,4 +408,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AddressMapPicker; 
+export default AddressMapPicker;

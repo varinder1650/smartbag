@@ -1,0 +1,231 @@
+/**
+ * API Utilities
+ * 
+ * This file provides utility functions for working with API URLs and endpoints
+ */
+
+import { API_BASE_URL } from '../config/apiConfig';
+
+/**
+ * Ensures a URL has a trailing slash
+ * @param {string} url - The URL to check
+ * @returns {string} - URL with trailing slash
+ */
+export const ensureTrailingSlash = (url) => {
+  if (!url) return '';
+  return url.endsWith('/') ? url : `${url}/`;
+};
+
+/**
+ * Removes leading slash from a path
+ * @param {string} path - The path to process
+ * @returns {string} - Path without leading slash
+ */
+export const removeLeadingSlash = (path) => {
+  if (!path) return '';
+  return path.startsWith('/') ? path.substring(1) : path;
+};
+
+/**
+ * Properly joins API base URL with endpoint path
+ * @param {string} baseUrl - The base URL
+ * @param {string} path - The endpoint path
+ * @returns {string} - Properly formatted URL
+ */
+export const joinApiUrl = (baseUrl, path) => {
+  const formattedBase = ensureTrailingSlash(baseUrl);
+  const formattedPath = removeLeadingSlash(path);
+  return `${formattedBase}${formattedPath}`;
+};
+
+/**
+ * Creates a properly formatted API endpoint URL
+ * @param {string} path - The endpoint path (with or without leading slash)
+ * @returns {string} - Full API URL
+ */
+export const createApiUrl = (path) => {
+  return joinApiUrl(API_BASE_URL, path);
+};
+
+/**
+ * Tests an API endpoint and returns the response
+ * @param {string} url - The full URL to test
+ * @returns {Promise<Object>} - Response object with status, data, etc.
+ */
+export const testApiEndpoint = async (url) => {
+  try {
+    console.log(`Testing API endpoint: ${url}`);
+    const startTime = Date.now();
+    const response = await fetch(url);
+    const endTime = Date.now();
+    
+    let data = null;
+    let error = null;
+    
+    try {
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { text };
+      }
+    } catch (e) {
+      error = e.message;
+    }
+
+    return {
+      success: response.ok,
+      status: response.status,
+      data,
+      error,
+      headers: {
+        'content-type': response.headers.get('content-type'),
+        'content-length': response.headers.get('content-length'),
+      },
+      url: response.url, // Final URL after any redirects
+      redirected: response.redirected,
+      redirectCount: response.redirectCount || 0,
+      responseTime: endTime - startTime,
+    };
+  } catch (error) {
+    console.error(`Error testing endpoint:`, error);
+    return {
+      success: false,
+      error: error.message,
+      url,
+    };
+  }
+};
+
+/**
+ * Diagnoses common API URL issues
+ * @param {string} baseUrl - The base URL to check
+ * @returns {Object} - Diagnosis results
+ */
+export const diagnoseApiUrl = (baseUrl) => {
+  if (!baseUrl) {
+    return {
+      valid: false,
+      issues: ['API base URL is empty or undefined'],
+      suggestions: ['Check environment variables', 'Verify API configuration'],
+    };
+  }
+
+  const issues = [];
+  const suggestions = [];
+
+  // Check for protocol
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    issues.push('Missing protocol (http:// or https://)');
+    suggestions.push('Add https:// to the beginning of the URL');
+  }
+
+  // Check for trailing slash
+  if (!baseUrl.endsWith('/')) {
+    issues.push('Missing trailing slash');
+    suggestions.push('Add trailing slash to API base URL');
+  }
+
+  // Check for double slashes in the middle
+  const middleDoubleSlash = baseUrl.substring(8).includes('//');
+  if (middleDoubleSlash) {
+    issues.push('Contains double slashes in the middle');
+    suggestions.push('Remove duplicate slashes from URL');
+  }
+
+  // Check for common typos
+  if (baseUrl.includes(' ')) {
+    issues.push('Contains spaces');
+    suggestions.push('Remove spaces from URL');
+  }
+
+  // Check for common API path issues
+  if (baseUrl.endsWith('/api')) {
+    issues.push('Missing trailing slash after /api');
+    suggestions.push('Add trailing slash: /api/');
+  }
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    suggestions,
+    fixedUrl: ensureTrailingSlash(baseUrl),
+  };
+};
+
+/**
+ * Analyzes an API error and provides helpful diagnostics
+ * @param {Error} error - The error object from an API call
+ * @param {string} url - The URL that was called
+ * @returns {Object} - Diagnostic information
+ */
+export const analyzeApiError = (error, url) => {
+  const diagnosis = {
+    originalError: error,
+    message: error.message,
+    possibleCauses: [],
+    suggestions: [],
+  };
+
+  // Network errors
+  if (error.message.includes('Network request failed')) {
+    diagnosis.possibleCauses.push('Network connectivity issue');
+    diagnosis.possibleCauses.push('API server is down');
+    diagnosis.possibleCauses.push('CORS policy blocking the request');
+    
+    diagnosis.suggestions.push('Check your internet connection');
+    diagnosis.suggestions.push('Verify the API server is running');
+    diagnosis.suggestions.push('Check if the API allows requests from your domain');
+  }
+
+  // URL parsing errors
+  if (error.message.includes('Invalid URL')) {
+    diagnosis.possibleCauses.push('Malformed URL');
+    
+    diagnosis.suggestions.push('Check the URL format');
+    diagnosis.suggestions.push('Ensure the URL has a valid protocol (http:// or https://)');
+  }
+
+  // Timeout errors
+  if (error.message.includes('timeout') || error.message.includes('timed out')) {
+    diagnosis.possibleCauses.push('API request timed out');
+    diagnosis.possibleCauses.push('Server is overloaded');
+    
+    diagnosis.suggestions.push('Increase the request timeout');
+    diagnosis.suggestions.push('Check server performance');
+  }
+
+  // Add URL diagnosis
+  const urlDiagnosis = diagnoseApiUrl(url);
+  if (!urlDiagnosis.valid) {
+    diagnosis.possibleCauses.push('API URL format issues');
+    diagnosis.suggestions = [...diagnosis.suggestions, ...urlDiagnosis.suggestions];
+  }
+
+  return diagnosis;
+};
+
+/**
+ * Fixes common API URL issues
+ * @param {string} url - The URL to fix
+ * @returns {string} - Fixed URL
+ */
+export const fixApiUrl = (url) => {
+  if (!url) return '';
+  
+  // Add protocol if missing
+  let fixedUrl = url;
+  if (!fixedUrl.startsWith('http://') && !fixedUrl.startsWith('https://')) {
+    fixedUrl = `https://${fixedUrl}`;
+  }
+  
+  // Ensure trailing slash
+  fixedUrl = ensureTrailingSlash(fixedUrl);
+  
+  // Fix double slashes (except in protocol)
+  const protocol = fixedUrl.startsWith('https://') ? 'https://' : 'http://';
+  const withoutProtocol = fixedUrl.substring(protocol.length);
+  const fixedWithoutProtocol = withoutProtocol.replace(/\/\//g, '/');
+  
+  return protocol + fixedWithoutProtocol;
+};

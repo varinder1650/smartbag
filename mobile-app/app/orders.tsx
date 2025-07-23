@@ -13,8 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../config/apiConfig';
 
 interface OrderItem {
   product: {
@@ -62,7 +61,7 @@ export default function OrdersScreen() {
     if (!token) return;
     
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/my`, {
+      const response = await fetch(API_ENDPOINTS.MY_ORDERS, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -440,4 +439,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#007AFF',
   },
-}); 
+});

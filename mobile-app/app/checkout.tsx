@@ -12,8 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../config/apiConfig';
 
 interface CartItem {
   _id: string;
@@ -55,7 +54,7 @@ export default function CheckoutScreen() {
   const loadData = async () => {
     try {
       // Fetch cart items
-      const cartResponse = await fetch(`${API_BASE_URL}/cart/`, {
+      const cartResponse = await fetch(API_ENDPOINTS.CART, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       
@@ -65,7 +64,7 @@ export default function CheckoutScreen() {
       }
       
       // Fetch settings
-      const settingsResponse = await fetch(`${API_BASE_URL}/settings/public`);
+      const settingsResponse = await fetch(API_ENDPOINTS.SETTINGS);
       if (settingsResponse.ok) {
         const settingsData = await settingsResponse.json();
         setSettings({
@@ -603,4 +602,4 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-}); 
+});

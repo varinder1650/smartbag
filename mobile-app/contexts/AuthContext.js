@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Use computer's IP address for React Native development
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/apiConfig';
+import { joinApiUrl } from '../utils/apiUtils';
 
 console.log('=== API IMPORT DEBUG ===');
 console.log('API_BASE_URL set:', API_BASE_URL);
@@ -52,10 +51,10 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('=== LOGIN DEBUG ===');
       console.log('Attempting login with URL:', API_BASE_URL);
-      console.log('Full URL:', `${API_BASE_URL}/auth/login`);
+      console.log('Full URL:', API_ENDPOINTS.LOGIN);
       console.log('Request body:', { emailOrPhone, password });
       
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,7 +91,8 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       console.log('Attempting registration with URL:', API_BASE_URL);
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      console.log('Full URL:', API_ENDPOINTS.REGISTER);
+      const response = await fetch(API_ENDPOINTS.REGISTER, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +128,8 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (updatedData) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+      console.log('Updating profile with URL:', API_ENDPOINTS.PROFILE);
+      const response = await fetch(API_ENDPOINTS.PROFILE, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -168,4 +169,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-}; 
+};

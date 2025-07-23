@@ -18,18 +18,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import MapView, { Marker } from 'react-native-maps';
+let MapView, Marker;
+if (Platform.OS !== 'web') {
+  MapView = require('react-native-maps').default;
+  Marker = require('react-native-maps').Marker;
+}
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
 import { reverseGeocode, searchAddresses, geocodeAddress } from '../services/api';
+import { API_BASE_URL, IMAGE_BASE_URL } from '../config/apiConfig';
 
 const { width, height } = Dimensions.get('window');
-
-// Use dynamic API URL from services
-const getApiUrl = () => {
-  // Use computer's IP address for React Native development
-  return 'http://10.0.0.74:3001/api';
-};
 
 interface SearchResult {
   place_id: string;
@@ -382,7 +381,7 @@ export default function AddressScreen() {
       }
 
       // Save to user profile (when called from home screen)
-      const apiUrl = getApiUrl();
+      const apiUrl = API_BASE_URL;
 
       // Use the same improved parsing for database save
       const addressParts = address.split(',').map(part => part.trim()).filter(part => part.length > 0);
@@ -484,37 +483,39 @@ export default function AddressScreen() {
   const renderMapSection = () => (
     <View style={styles.mapSection}>
       <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={{
-            latitude: latitude,
-            longitude: longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-          onPress={handleMapPress}
-          showsUserLocation={true}
-          showsMyLocationButton={true}
-        >
-          <Marker
-            coordinate={{
+        {Platform.OS !== 'web' && MapView && (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={{
               latitude: latitude,
               longitude: longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
             }}
-            title="Delivery Address"
-            description="Tap and drag to adjust"
-            draggable
-            onDragEnd={async (e) => {
-              const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
-              setLatitude(lat);
-              setLongitude(lng);
-              
-              // Get address for the new location
-              await getAddressFromCoordinates(lat, lng);
-            }}
-          />
-        </MapView>
+            onPress={handleMapPress}
+            showsUserLocation={true}
+            showsMyLocationButton={true}
+          >
+            <Marker
+              coordinate={{
+                latitude: latitude,
+                longitude: longitude,
+              }}
+              title="Delivery Address"
+              description="Tap and drag to adjust"
+              draggable
+              onDragEnd={async (e) => {
+                const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
+                setLatitude(lat);
+                setLongitude(lng);
+                
+                // Get address for the new location
+                await getAddressFromCoordinates(lat, lng);
+              }}
+            />
+          </MapView>
+        )}
         {/* Center indicator */}
         <View style={styles.centerIndicator}>
           <Ionicons name="location" size={24} color="#007AFF" />
@@ -813,7 +814,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   mapContainer: {
-    height: 250,
+    height: Platform.OS === 'web' ? 0 : 250, // Hide map container on web
     position: 'relative',
     marginHorizontal: 16,
     borderRadius: 12,
@@ -915,4 +916,4 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-}); 
+});

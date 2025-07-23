@@ -13,9 +13,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-// Direct API URL instead of import
-const API_BASE_URL = 'http://10.0.0.74:3001/api';
-const IMAGE_BASE_URL = 'http://10.0.0.74:3001';
+import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
+
 import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -47,7 +46,7 @@ export default function ProductDetailScreen() {
   const fetchProduct = async () => {
     try {
       const timestamp = Date.now();
-      const response = await fetch(`${API_BASE_URL}/products/${id}?_t=${timestamp}`);
+      const response = await fetch(`${API_ENDPOINTS.PRODUCT_BY_ID(id)}?_t=${timestamp}`);
       const data = await response.json();
       
       if (response.ok) {
@@ -74,7 +73,7 @@ export default function ProductDetailScreen() {
       console.log('addToCart: productId:', id);
       const body = JSON.stringify({ productId: id, quantity: 1 });
       console.log('addToCart: request body:', body);
-      const response = await fetch(`${API_BASE_URL}/cart/add`, {
+      const response = await fetch(API_ENDPOINTS.CART_ADD, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -398,4 +397,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 8,
   },
-}); 
+});
