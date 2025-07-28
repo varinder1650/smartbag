@@ -73,7 +73,13 @@ async def get_current_user(
     if user and '_id' in user and user['_id'] is not None:
         user['_id'] = str(user['_id'])
     
-    return UserInDB(**user)
+    try:
+        return UserInDB(**user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Invalid user data: {e}"
+        )
 
 async def get_current_active_user(
     current_user: UserInDB = Depends(get_current_user)
@@ -90,4 +96,4 @@ async def get_current_admin_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized"
         )
-    return current_user 
+    return current_user

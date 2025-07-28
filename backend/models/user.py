@@ -4,7 +4,7 @@ from .base import BaseDocument
 from datetime import datetime
 
 def validate_role(role: str) -> str:
-    valid_roles = ["user", "admin", "partner"]
+    valid_roles = ["user", "admin", "partner", "delivery"]
     if role not in valid_roles:
         raise ValueError(f"Role must be one of: {', '.join(valid_roles)}")
     return role
@@ -68,4 +68,4 @@ class UserAddress(BaseModel):
 
 class UserAddressResponse(BaseModel):
     address: Optional[str] = None
-    location: Optional[dict] = None 
+    location: Optional[dict] = None

@@ -2,10 +2,11 @@ from fastapi import APIRouter, HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import List
-from datetime import timedelta
+from datetime import timedelta, datetime
 import logging
 from bson import ObjectId
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import secrets
 
 from models.user import UserCreate, UserResponse, UserLogin, Token, UserInDB
 from utils.auth import (
@@ -35,6 +36,13 @@ def fix_mongo_types(doc):
 
 class LoginRequest(BaseModel):
     emailOrPhone: str
+    password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
     password: str
 
 @router.post("/register", response_model=UserResponse)
@@ -378,6 +386,72 @@ async def update_user(
             detail="Failed to update user"
         )
 
+@router.post("/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest, db: DatabaseManager = Depends(get_database)):
+    """Initiate password reset process"""
+    try:
+        user = await db.find_one("users", {"email": request.email})
+        if not user:
+            # Don't reveal that the user doesn't exist
+            logger.info(f"Password reset requested for non-existent user: {request.email}")
+            return {"message": "If an account with that email exists, a password reset link has been sent."}
+
+        # Generate a secure token
+        token = secrets.token_urlsafe(32)
+        reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+
+        await db.update_one(
+            "users",
+            {"_id": user["_id"]},
+            {"reset_token": token, "reset_token_expires": reset_token_expires}
+        )
+
+        # In a real app, you would send an email here
+        logger.info(f"Password reset token for {request.email}: {token}")
+
+        return {"message": "If an account with that email exists, a password reset link has been sent."}
+    except Exception as e:
+        logger.error(f"Forgot password error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process forgot password request"
+        )
+
+@router.post("/reset-password")
+async def reset_password(request: ResetPasswordRequest, db: DatabaseManager = Depends(get_database)):
+    """Reset password using a token"""
+    try:
+        user = await db.find_one("users", {"reset_token": request.token})
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid token"
+            )
+
+        if user["reset_token_expires"] < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token has expired"
+            )
+
+        hashed_password = get_password_hash(request.password)
+        await db.update_one(
+            "users",
+            {"_id": user["_id"]},
+            {"hashed_password": hashed_password, "reset_token": None, "reset_token_expires": None}
+        )
+
+        return {"message": "Password has been reset successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password"
+        )
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: UserInDB = Depends(get_current_active_user)):
-    return fix_mongo_types(current_user.dict(by_alias=True)) 
+    return fix_mongo_types(current_user.dict(by_alias=True))

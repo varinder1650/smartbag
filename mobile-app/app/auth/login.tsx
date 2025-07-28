@@ -16,8 +16,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 
 export default function LoginScreen() {
-  const [emailOrPhone, setEmailOrPhone] = useState('nitingoyal3150@gmail.com');
-  const [password, setPassword] = useState('password123');
+  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 
@@ -62,6 +62,10 @@ export default function LoginScreen() {
     router.push('/auth/register');
   };
 
+  const handleForgotPassword = () => {
+    router.push('/auth/forgot-password');
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -97,6 +101,10 @@ export default function LoginScreen() {
               secureTextEntry
               returnKeyType="done"
             />
+
+            <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotPassword}>
+              <Text style={styles.linkText}>Forgot Password?</Text>
+            </TouchableOpacity>
             
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
@@ -198,6 +206,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 15,
+  },
   testCredentials: {
     backgroundColor: '#f0f0f0',
     padding: 15,
@@ -216,4 +228,4 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 2,
   },
-}); 
+});
