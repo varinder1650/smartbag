@@ -62,9 +62,9 @@ const HomeScreen = () => {
   const [userAddress, setUserAddress] = useState<string>('Add Address');
 
   useEffect(() => {
-    fetchData();
+    // Initial data fetch
+    fetchData(searchQuery, selectedCategory);
     fetchCartCount();
-    // Only fetch user address if auth is not loading and we have a token
     if (!authLoading) {
       fetchUserAddress();
     }
@@ -78,8 +78,17 @@ const HomeScreen = () => {
   );
 
   useEffect(() => {
-    filterProducts();
-  }, [searchQuery, products, selectedCategory]);
+    // Debounced fetch when search or category changes
+    const handler = setTimeout(() => {
+      if (searchQuery.length === 0 || searchQuery.length > 2) {
+        fetchData(searchQuery, selectedCategory);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery, selectedCategory]);
 
   const fetchCartCount = async () => {
     if (!token) {
@@ -113,7 +122,7 @@ const HomeScreen = () => {
     }
     
     try {
-      const response = await fetch(`${API_BASE_URL}/user/address`, {
+      const response = await fetch(API_ENDPOINTS.USER_ADDRESS, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -131,52 +140,25 @@ const HomeScreen = () => {
     }
   };
 
-  const filterProducts = () => {
+  // This function is no longer needed as filtering is done on the backend.
+  // We can remove it or leave it empty.
+  const filterProducts = () => {};
+
+  const fetchData = async (search: string = '', category: string | null = null) => {
     try {
-      // Ensure products is always an array
-      let filtered = products || [];
-      console.log('filterProducts - products:', products);
-      console.log('filterProducts - filtered (initial):', filtered);
-
-      // Filter by category (match by name or ID since categories API returns _id: null)
-      if (selectedCategory) {
-        const selectedCat = categories.find(cat => cat._id === selectedCategory || cat.name === selectedCategory);
-        if (selectedCat) {
-          filtered = filtered.filter(product =>
-            product.category?.name === selectedCat.name ||
-            product.category?._id === selectedCat._id
-          );
-        }
-        console.log('filterProducts - after category filter:', filtered);
-      }
-
-      // Filter by search query
-      if (searchQuery.trim()) {
-        filtered = filtered.filter(product =>
-          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          product.category?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          product.brand?.name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-        console.log('filterProducts - after search filter:', filtered);
-      }
-
-      // Ensure we always set an array
-      const finalFiltered = Array.isArray(filtered) ? filtered : [];
-      console.log('filterProducts - final filtered:', finalFiltered);
-      setFilteredProducts(finalFiltered);
-    } catch (error) {
-      console.error('Error in filterProducts:', error);
-      setFilteredProducts([]);
-    }
-  };
-
-  const fetchData = async () => {
-    try {
-      console.log('fetchData - starting...');
+      setLoading(true);
+      console.log(`fetchData - starting... search: ${search}, category: ${category}`);
       const timestamp = Date.now();
+      let productsUrl = `${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`;
+      if (search) {
+        productsUrl += `&search=${encodeURIComponent(search)}`;
+      }
+      if (category) {
+        productsUrl += `&category=${encodeURIComponent(category)}`;
+      }
+
       const [productsRes, categoriesRes] = await Promise.all([
-        fetch(`${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`),
+        fetch(productsUrl),
         fetch(`${API_ENDPOINTS.CATEGORIES}?_t=${timestamp}`),
       ]);
       
@@ -198,8 +180,15 @@ const HomeScreen = () => {
       const safeProducts = Array.isArray(productsArray) ? productsArray : [];
       const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
       
+      // If searching, we replace products, otherwise we might merge them
+      // For now, a simple replacement is fine.
       setProducts(safeProducts);
-      setCategories(safeCategories);
+      setFilteredProducts(safeProducts);
+      
+      // Only update categories if they haven't been loaded yet
+      if (categories.length === 0) {
+        setCategories(safeCategories);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       Alert.alert('Error', 'Failed to load data. Please check your connection.');
@@ -499,6 +488,10 @@ const HomeScreen = () => {
   };
 
   const renderMainListItem = ({ item }: { item: Category }) => {
+    // In search mode, we render products directly, not by category
+    if (searchQuery.trim() || selectedCategory) {
+      return null; // Products are rendered in a separate FlatList
+    }
     return renderCategorySection(item);
   };
 
@@ -532,17 +525,28 @@ const HomeScreen = () => {
     <SafeAreaView style={styles.container}>
       {renderTopBar()}
       {renderSearchBar()}
-      {searchQuery.trim() ? (
+      {searchQuery.trim() || selectedCategory ? (
         <FlatList
+          key="search-results"
           data={filteredProducts}
           renderItem={renderProductTile}
           keyExtractor={(item) => item._id}
+          numColumns={2} // Display in a grid
           ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32, color: '#888' }}>No products found.</Text>}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 16, paddingBottom: 32 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#007AFF']}
+              tintColor="#007AFF"
+            />
+          }
         />
       ) : (
         <FlatList
+          key="category-browse"
           data={getMainListData()}
           renderItem={renderMainListItem}
           keyExtractor={(item) => item._id || item.name || `category-${Math.random()}`}
@@ -557,7 +561,7 @@ const HomeScreen = () => {
               tintColor="#007AFF"
             />
           }
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
+          contentContainerStyle={{ paddingTop: 16 }}
         />
       )}
       {showCartNotification && (

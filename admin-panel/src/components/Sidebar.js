@@ -73,7 +73,7 @@ const Sidebar = ({ open, onToggle }) => {
           />
           <Box sx={{ display: 'none', alignItems: 'center', gap: 1 }}>
             <Typography variant="h6" color="primary">
-              Your Company Name
+              SmartBag
             </Typography>
           </Box>
         </Box>

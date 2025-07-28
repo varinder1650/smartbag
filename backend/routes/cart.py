@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from models.cart import CartItem, CartCreate, CartUpdate, CartResponse
 from utils.database import DatabaseManager, get_database
-from utils.auth import get_current_active_user
+from utils.auth import get_current_active_user, get_current_user
 from models.user import UserInDB
 from utils.mongo import fix_mongo_types
 
@@ -274,4 +274,4 @@ async def clear_cart(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to clear cart"
-        ) 
+        )

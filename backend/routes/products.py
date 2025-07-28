@@ -170,11 +170,22 @@ async def get_products(
         if search:
             # Search in name, description, and keywords
             search_lower = search.lower()
-            query["$or"] = [
+            # Split search string into individual keywords
+            search_keywords = [kw.strip() for kw in search_lower.split(',') if kw.strip()]
+            
+            # Build the $or query
+            or_query = [
                 {"name": {"$regex": search_lower, "$options": "i"}},
                 {"description": {"$regex": search_lower, "$options": "i"}},
-                {"keywords": {"$in": [search_lower]}}
             ]
+            
+            # Add regex search for each keyword in the product's keywords array
+            if search_keywords:
+                or_query.append({"keywords": {"$all": [
+                    {"$elemMatch": {"$regex": kw, "$options": "i"}} for kw in search_keywords
+                ]}})
+
+            query["$or"] = or_query
         
         # Calculate pagination
         skip = (page - 1) * limit
@@ -404,4 +415,4 @@ async def delete_product(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete product"
-        ) 
+        )

@@ -10,7 +10,7 @@ console.log('🔗 API Base URL (from services/api.js):', API_BASE_URL);
 // Request interceptor to add auth token
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('userToken');
+    const token = await AsyncStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -27,7 +27,7 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       // Token expired or invalid
-      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('token');
       // You can navigate to login screen here
     }
     return Promise.reject(error);
@@ -190,6 +190,12 @@ export const updateUserAddress = async (addressData) => {
   } catch (error) {
     throw error;
   }
+};
+
+export const geocodeAddress = async (address) => {
+  // TODO: Implement this function
+  console.warn("geocodeAddress is not implemented");
+  return { lat: 0, lng: 0 };
 };
 
 // Export the api instance for direct use

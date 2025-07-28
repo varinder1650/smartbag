@@ -76,25 +76,25 @@ export const IMAGE_BASE_URL = API_BASE_URL.replace('/api/', '').replace('/api', 
 // Export API endpoints
 export const API_ENDPOINTS = {
   // Auth
-  LOGIN: joinApiUrl(API_BASE_URL, 'auth/login/'),
-  REGISTER: joinApiUrl(API_BASE_URL, 'auth/register/'),
-  PROFILE: joinApiUrl(API_BASE_URL, 'auth/profile/'),
+  LOGIN: joinApiUrl(API_BASE_URL, 'auth/login'),
+  REGISTER: joinApiUrl(API_BASE_URL, 'auth/register'),
+  PROFILE: joinApiUrl(API_BASE_URL, 'auth/profile'),
   
   // Products
-  PRODUCTS: joinApiUrl(API_BASE_URL, 'products/'),
-  PRODUCT_BY_ID: (id) => joinApiUrl(API_BASE_URL, `products/${id}/`),
+  PRODUCTS: joinApiUrl(API_BASE_URL, 'products'),
+  PRODUCT_BY_ID: (id) => joinApiUrl(API_BASE_URL, `products/${id}`),
 
   // Categories
-  CATEGORIES: joinApiUrl(API_BASE_URL, 'categories/'),
+  CATEGORIES: joinApiUrl(API_BASE_URL, 'categories'),
 
   // Brands
-  BRANDS: joinApiUrl(API_BASE_URL, 'brands/'),
+  BRANDS: joinApiUrl(API_BASE_URL, 'brands'),
   
   // Cart
   CART: joinApiUrl(API_BASE_URL, 'cart/'),
-  CART_ADD: joinApiUrl(API_BASE_URL, 'cart/add/'),
-  CART_REMOVE: joinApiUrl(API_BASE_URL, 'cart/remove/'),
-  CART_UPDATE: joinApiUrl(API_BASE_URL, 'cart/update/'),
+  CART_ADD: joinApiUrl(API_BASE_URL, 'cart/add'),
+  CART_REMOVE: joinApiUrl(API_BASE_URL, 'cart/remove'),
+  CART_UPDATE: joinApiUrl(API_BASE_URL, 'cart/update'),
   
   // Orders
   ORDERS: joinApiUrl(API_BASE_URL, 'orders'),
@@ -107,10 +107,10 @@ export const API_ENDPOINTS = {
   DELIVERED_ORDERS: joinApiUrl(API_BASE_URL, 'orders/delivered-by-partner'),
 
   // Settings
-  SETTINGS: joinApiUrl(API_BASE_URL, 'settings/public/'),
+  SETTINGS: joinApiUrl(API_BASE_URL, 'settings/public'),
 
   // User
-  USER_ADDRESS: joinApiUrl(API_BASE_URL, 'user/address/'),
+  USER_ADDRESS: joinApiUrl(API_BASE_URL, 'user/address'),
 };
 
 // Export for axios configuration
@@ -120,3 +120,10 @@ export const axiosConfig = {
 };
 
 console.log('🔗 API Base URL configured as:', API_BASE_URL);
+
+// Force log to terminal during build
+if (typeof process !== 'undefined' && process.stdout) {
+  process.stdout.write(`\n🔗 TERMINAL LOG: API_BASE_URL = ${API_BASE_URL}\n`);
+  process.stdout.write(`🔗 TERMINAL LOG: ENV_API_URL = ${ENV_API_URL}\n`);
+  process.stdout.write(`🔗 TERMINAL LOG: process.env.EXPO_PUBLIC_API_URL = ${process.env.EXPO_PUBLIC_API_URL}\n\n`);
+}
