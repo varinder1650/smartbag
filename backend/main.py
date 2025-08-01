@@ -15,6 +15,7 @@ import uvicorn
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from routes import auth, products, categories, brands, cart, orders, upload, user, address, settings, geocoding
 
 # Load environment variables
 load_dotenv()
@@ -107,7 +108,7 @@ app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
 app.include_router(user.router, prefix="/api/user", tags=["User"])
 app.include_router(address.router, prefix="/api/address", tags=["Address"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
-
+app.include_router(geocoding.router, prefix="/api", tags=["Geocoding"])
 # Root route
 @app.get("/")
 async def root():

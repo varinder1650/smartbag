@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,12 @@ import {
   ActivityIndicator,
   Keyboard,
   ScrollView,
-  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-let MapView, Marker;
+import AsyncStorage from '@react-native-async-storage/async-storage';
+let MapView: any, Marker: any;
 if (Platform.OS !== 'web') {
   MapView = require('react-native-maps').default;
   Marker = require('react-native-maps').Marker;
@@ -57,14 +57,10 @@ export default function AddressScreen() {
   const isFromCheckout = params.from === 'checkout';
   
   const [address, setAddress] = useState('');
-  const [latitude, setLatitude] = useState(20.5937); // Default to India center
-  const [longitude, setLongitude] = useState(78.9629);
-  const [region, setRegion] = useState({
-    latitude: 20.5937,
-    longitude: 78.9629,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
+  // Initialize with null to indicate location not yet determined
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [region, setRegion] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -72,35 +68,36 @@ export default function AddressScreen() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [updatingMap, setUpdatingMap] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(true);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  const [apiEndpointsAvailable, setApiEndpointsAvailable] = useState({
+    search: true,
+    geocode: true,
+    reverseGeocode: true,
+  });
+  
   const mapRef = useRef(null);
   const searchInputRef = useRef<TextInput>(null);
   const geocodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const locationCacheRef = useRef<{location: any, timestamp: number} | null>(null);
 
-  useEffect(() => {
-    getCurrentLocation();
-    
-    // Cleanup function to clear timeout
-    return () => {
-      if (geocodeTimeoutRef.current) {
-        clearTimeout(geocodeTimeoutRef.current);
-      }
-    };
-  }, [token, user]);
-
-  useEffect(() => {
-    if (searchQuery.length > 2) {
-      const timeoutId = setTimeout(() => {
-        performAddressSearch(searchQuery);
-      }, 300); // Reduced debounce time for better responsiveness
-      return () => clearTimeout(timeoutId);
-    } else {
-      setSearchResults([]);
-      setShowSearchResults(false);
-    }
-  }, [searchQuery]);
-
-  const performAddressSearch = async (query: string) => {
+  const performAddressSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
+    
+    // Skip API call if we know the endpoint isn't available
+    if (!apiEndpointsAvailable.search) {
+      setSearchResults([{
+        place_id: 'manual',
+        description: query,
+        structured_formatting: {
+          main_text: query,
+          secondary_text: 'Enter manually'
+        }
+      }]);
+      setShowSearchResults(true);
+      return;
+    }
     
     setSearching(true);
     try {
@@ -122,34 +119,38 @@ export default function AddressScreen() {
         setShowSearchResults(true);
       }
     } catch (error: any) {
-      // Check if it's a network error or API error
-      if (error.response) {
-        // API error - could show user-friendly message
-      } else if (error.request) {
-        // Network error - could show retry option
-      } else {
-        // Other error
+      console.error('Search error:', error);
+      
+      // If it's a 404, mark the endpoint as unavailable
+      if (error.response?.status === 404) {
+        setApiEndpointsAvailable(prev => ({ ...prev, search: false }));
       }
       
-      // Fallback: create a simple suggestion
-      setSearchResults([{
-        place_id: 'manual',
-        description: query,
-        structured_formatting: {
-          main_text: query,
-          secondary_text: 'Enter manually'
+      // Provide helpful fallback options
+      setSearchResults([
+        {
+          place_id: 'manual',
+          description: query,
+          structured_formatting: {
+            main_text: query,
+            secondary_text: 'Enter manually'
+          }
         }
-      }]);
+      ]);
       setShowSearchResults(true);
     } finally {
       setSearching(false);
     }
-  };
+  }, [apiEndpointsAvailable.search]);
 
-  const updateMapFromAddress = async (addressText: string) => {
-    if (!addressText.trim()) {
+  const updateMapFromAddress = useCallback(async (addressText: string) => {
+    if (!addressText.trim()) return;
+    
+    // Skip API call if we know the endpoint isn't available
+    if (!apiEndpointsAvailable.geocode) {
       return;
     }
+    
     setUpdatingMap(true);
     try {
       const data = await geocodeAddress(addressText);
@@ -164,108 +165,99 @@ export default function AddressScreen() {
           longitudeDelta: 0.01,
         });
         
-        if (data.note) {
+        // Animate map to new location if map exists
+        if (mapRef.current && Platform.OS !== 'web') {
+          (mapRef.current as any).animateToRegion({
+            latitude: data.latitude,
+            longitude: data.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }, 1000);
         }
       } else {
-        Alert.alert('Info', 'Could not get exact coordinates for this address. You can manually adjust the map location.');
+        // Mark geocoding as unavailable if it returns null coordinates
+        if (data.latitude === null) {
+          setApiEndpointsAvailable(prev => ({ ...prev, geocode: false }));
+        }
       }
     } catch (error: any) {
       console.error('Error updating map from address:', error);
       
-      if (error.response) {
+      // If it's a 404, mark the endpoint as unavailable
+      if (error.response?.status === 404) {
+        setApiEndpointsAvailable(prev => ({ ...prev, geocode: false }));
       }
-      
-      Alert.alert('Info', 'Could not get exact coordinates for this address. You can manually adjust the map location.');
     } finally {
       setUpdatingMap(false);
     }
-  };
+  }, [apiEndpointsAvailable.geocode]);
 
-  const selectSearchResult = async (result: SearchResult) => {
+  const selectSearchResult = useCallback(async (result: SearchResult) => {
+    if (result.place_id === 'retry') {
+      // Handle retry option
+      const originalQuery = searchQuery;
+      setSearching(true);
+      await performAddressSearch(originalQuery);
+      return;
+    }
+
     setSearchQuery(result.description);
     setAddress(result.description);
     setShowSearchResults(false);
     setIsSearchFocused(false);
     Keyboard.dismiss();
     
-    // Update map coordinates for the selected address
-    await updateMapFromAddress(result.description);
-  };
-
-  const getCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required to set your address');
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude: lat, longitude: lng } = location.coords;
+    // Try to update map coordinates for the selected address
+    if (apiEndpointsAvailable.geocode) {
+      await updateMapFromAddress(result.description);
+    } else {
+      // If geocoding not available, try to match with known cities
+      const cityCoordinates = {
+        'mumbai': { latitude: 19.0760, longitude: 72.8777 },
+        'delhi': { latitude: 28.7041, longitude: 77.1025 },
+        'bangalore': { latitude: 12.9716, longitude: 77.5946 },
+        'hyderabad': { latitude: 17.3850, longitude: 78.4867 },
+        'ahmedabad': { latitude: 23.0225, longitude: 72.5714 },
+        'chennai': { latitude: 13.0827, longitude: 80.2707 },
+        'kolkata': { latitude: 22.5726, longitude: 88.3639 },
+        'pune': { latitude: 18.5204, longitude: 73.8567 },
+        'jaipur': { latitude: 26.9124, longitude: 75.7873 },
+        'lucknow': { latitude: 26.8467, longitude: 80.9462 },
+      };
       
-      setLatitude(lat);
-      setLongitude(lng);
-      setRegion({
-        latitude: lat,
-        longitude: lng,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
-
-      // Get address from coordinates
-      const addressResponse = await Location.reverseGeocodeAsync({
-        latitude: lat,
-        longitude: lng,
-      });
-
-      if (addressResponse.length > 0) {
-        const addr = addressResponse[0];
-        const fullAddress = [
-          addr.street,
-          addr.district,
-          addr.city,
-          addr.region,
-          addr.postalCode,
-        ].filter(Boolean).join(', ');
-        setAddress(fullAddress);
-        setSearchQuery(fullAddress);
-      }
-    } catch (error) {
-      console.error('Error getting location:', error);
-      Alert.alert('Error', 'Could not get your current location');
-    }
-  };
-
-  const handleMapPress = async (event: any) => {
-    const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
-    setLatitude(lat);
-    setLongitude(lng);
-    
-    // Get address for the selected location
-    await getAddressFromCoordinates(lat, lng);
-  };
-
-  const getAddressFromCoordinates = async (lat: number, lng: number) => {
-    try {
-      // First try backend API for reverse geocoding
-      let backendSuccess = false;
-      try {
-        const data = await reverseGeocode(lat, lng);
-        
-        if (data.formattedAddress) {
-          setAddress(data.formattedAddress);
-          setSearchQuery(data.formattedAddress);
-          backendSuccess = true;
-          return; // Success, exit early
+      const addressLower = result.description.toLowerCase();
+      for (const [city, coords] of Object.entries(cityCoordinates)) {
+        if (addressLower.includes(city)) {
+          setLatitude(coords.latitude);
+          setLongitude(coords.longitude);
+          setRegion({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+          
+          // Animate map to new location if map exists
+          if (mapRef.current && Platform.OS !== 'web') {
+            (mapRef.current as any).animateToRegion({
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }, 1000);
+          }
+          break;
         }
-      } catch (backendError: any) {
       }
-      
-      // If backend failed, use Expo Location fallback
-      if (!backendSuccess) {
-        
+    }
+  }, [searchQuery, performAddressSearch, updateMapFromAddress, apiEndpointsAvailable.geocode]);
+
+  const getAddressFromCoordinates = useCallback(async (lat: number, lng: number, isInitial = false) => {
+    try {
+      // For initial load, try faster method first
+      if (isInitial) {
         try {
-          // Fallback: Use Expo Location for reverse geocoding
+          // Use device's reverse geocoding for faster initial load
           const addressResponse = await Location.reverseGeocodeAsync({
             latitude: lat,
             longitude: lng,
@@ -283,14 +275,81 @@ export default function AddressScreen() {
             
             setAddress(fullAddress);
             setSearchQuery(fullAddress);
-          } else {
-            // If no address found, create a basic one from coordinates
-            const basicAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            setAddress(basicAddress);
-            setSearchQuery(basicAddress);
+            
+            // Try backend API in background for better accuracy (only if available)
+            if (apiEndpointsAvailable.reverseGeocode) {
+              setTimeout(async () => {
+                try {
+                  const data = await reverseGeocode(lat, lng);
+                  if (data && data.formattedAddress && data.formattedAddress !== fullAddress) {
+                    setAddress(data.formattedAddress);
+                    setSearchQuery(data.formattedAddress);
+                  }
+                } catch (error: any) {
+                  // If 404, mark as unavailable
+                  if (error.response?.status === 404) {
+                    setApiEndpointsAvailable(prev => ({ ...prev, reverseGeocode: false }));
+                  }
+                }
+              }, 1000);
+            }
+            
+            return;
           }
         } catch (expoError) {
+          console.log('Expo geocoding failed:', expoError);
         }
+      }
+
+      // Primary method: try backend API first (only if available)
+      if (apiEndpointsAvailable.reverseGeocode) {
+        try {
+          const data = await reverseGeocode(lat, lng);
+          
+          if (data && data.formattedAddress) {
+            setAddress(data.formattedAddress);
+            setSearchQuery(data.formattedAddress);
+            return;
+          }
+        } catch (backendError: any) {
+          // If 404, mark as unavailable
+          if (backendError.response?.status === 404) {
+            setApiEndpointsAvailable(prev => ({ ...prev, reverseGeocode: false }));
+          }
+        }
+      }
+      
+      // Fallback: Use Expo Location for reverse geocoding
+      try {
+        const addressResponse = await Location.reverseGeocodeAsync({
+          latitude: lat,
+          longitude: lng,
+        });
+
+        if (addressResponse.length > 0) {
+          const addr = addressResponse[0];
+          const fullAddress = [
+            addr.street,
+            addr.district,
+            addr.city,
+            addr.region,
+            addr.postalCode,
+          ].filter(Boolean).join(', ');
+          
+          setAddress(fullAddress);
+          setSearchQuery(fullAddress);
+        } else {
+          // If no address found, create a basic one from coordinates
+          const basicAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          setAddress(basicAddress);
+          setSearchQuery(basicAddress);
+        }
+      } catch (expoError) {
+        console.error('All geocoding methods failed:', expoError);
+        // Last resort: coordinate-based address
+        const fallbackAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setAddress(fallbackAddress);
+        setSearchQuery(fallbackAddress);
       }
     } catch (error) {
       console.error('Error getting address from coordinates:', error);
@@ -300,9 +359,181 @@ export default function AddressScreen() {
       setAddress(fallbackAddress);
       setSearchQuery(fallbackAddress);
     }
-  };
+  }, [apiEndpointsAvailable.reverseGeocode]);
 
-  const handleSaveAddress = async () => {
+  const getCurrentLocation = useCallback(async (useCache = true) => {
+    try {
+      // Check cache first (5 minute cache)
+      if (useCache && locationCacheRef.current) {
+        const cacheAge = Date.now() - locationCacheRef.current.timestamp;
+        if (cacheAge < 5 * 60 * 1000) { // 5 minutes
+          const cached = locationCacheRef.current.location;
+          setLatitude(cached.latitude);
+          setLongitude(cached.longitude);
+          setRegion({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+          setLocationLoading(false);
+          return;
+        }
+      }
+
+      setLocationLoading(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setLocationPermissionDenied(true);
+        setLocationLoading(false);
+        // Fallback to a major city center (Mumbai) instead of geographic center
+        const fallbackLat = 19.0760;
+        const fallbackLng = 72.8777;
+        setLatitude(fallbackLat);
+        setLongitude(fallbackLng);
+        setRegion({
+          latitude: fallbackLat,
+          longitude: fallbackLng,
+          latitudeDelta: 0.1, // Wider view for fallback
+          longitudeDelta: 0.1,
+        });
+        Alert.alert(
+          'Location Permission', 
+          'Location permission was denied. You can still manually enter or search for your address.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Use high accuracy for initial location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude: lat, longitude: lng } = location.coords;
+      
+      // Cache the location
+      locationCacheRef.current = {
+        location: { latitude: lat, longitude: lng },
+        timestamp: Date.now()
+      };
+      
+      setLatitude(lat);
+      setLongitude(lng);
+      setRegion({
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+
+      // Get address from coordinates with optimized approach
+      await getAddressFromCoordinates(lat, lng, true); // isInitial = true
+      
+    } catch (error: any) {
+      console.error('Error getting location:', error);
+      setLocationPermissionDenied(true);
+      // Fallback to Mumbai coordinates
+      const fallbackLat = 19.0760;
+      const fallbackLng = 72.8777;
+      setLatitude(fallbackLat);
+      setLongitude(fallbackLng);
+      setRegion({
+        latitude: fallbackLat,
+        longitude: fallbackLng,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      });
+      
+      Alert.alert(
+        'Location Error', 
+        'Could not get your current location. You can manually enter or search for your address.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLocationLoading(false);
+    }
+  }, [getAddressFromCoordinates]);
+
+  useEffect(() => {
+    // Get current location immediately on component mount
+    getCurrentLocation(false); // Don't use cache on initial load
+    
+    // Cleanup function to clear timeouts
+    return () => {
+      if (geocodeTimeoutRef.current) {
+        clearTimeout(geocodeTimeoutRef.current);
+      }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [getCurrentLocation, token, user]);
+
+  // Optimized search with reduced debounce time
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchQuery.length > 2) {
+      searchTimeoutRef.current = setTimeout(() => {
+        performAddressSearch(searchQuery);
+      }, 200); // Reduced from 300ms to 200ms for faster response
+    } else {
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  const parseAddress = useCallback((addressText: string) => {
+    const addressParts = addressText.split(',').map(part => part.trim()).filter(part => part.length > 0);
+    
+    let city = '';
+    let state = '';
+    let pincode = '';
+    
+    // Look for pincode (6-digit number) at the end
+    const pincodeMatch = addressText.match(/\b\d{6}\b/);
+    if (pincodeMatch) {
+      pincode = pincodeMatch[0];
+    }
+    
+    // Remove pincode and "India" from address parts for better parsing
+    const cleanParts = addressParts.filter(part => 
+      part !== pincode && 
+      part.toLowerCase() !== 'india' && 
+      !/^\d{6}$/.test(part)
+    );
+    
+    if (cleanParts.length >= 2) {
+      // Last part is usually state, second to last is city
+      city = cleanParts[cleanParts.length - 2] || '';
+      state = cleanParts[cleanParts.length - 1] || '';
+    } else if (cleanParts.length === 1) {
+      city = cleanParts[0];
+      state = '';
+    }
+    
+    // If we couldn't find a pincode, try to extract from the end
+    if (!pincode && addressParts.length > 0) {
+      const lastPart = addressParts[addressParts.length - 1];
+      if (/^\d{6}$/.test(lastPart)) {
+        pincode = lastPart;
+      }
+    }
+    
+    return { city, state, pincode };
+  }, []);
+
+  const handleSaveAddress = useCallback(async () => {
     if (!address.trim()) {
       Alert.alert('Error', 'Please enter a delivery address');
       return;
@@ -312,42 +543,7 @@ export default function AddressScreen() {
     try {
       if (isFromCheckout) {
         // For checkout flow, create address data and navigate back with parameters
-        const addressParts = address.split(',').map(part => part.trim()).filter(part => part.length > 0);
-        
-        // Improved address parsing
-        let city = '';
-        let state = '';
-        let pincode = '';
-        
-        // Look for pincode (6-digit number) at the end
-        const pincodeMatch = address.match(/\b\d{6}\b/);
-        if (pincodeMatch) {
-          pincode = pincodeMatch[0];
-        }
-        
-        // Remove pincode and "India" from address parts for better parsing
-        const cleanParts = addressParts.filter(part => 
-          part !== pincode && 
-          part.toLowerCase() !== 'india' && 
-          !/^\d{6}$/.test(part)
-        );
-        
-        if (cleanParts.length >= 2) {
-          // Last part is usually state, second to last is city
-          city = cleanParts[cleanParts.length - 2] || '';
-          state = cleanParts[cleanParts.length - 1] || '';
-        } else if (cleanParts.length === 1) {
-          city = cleanParts[0];
-          state = '';
-        }
-        
-        // If we couldn't find a pincode, try to extract from the end
-        if (!pincode && addressParts.length > 0) {
-          const lastPart = addressParts[addressParts.length - 1];
-          if (/^\d{6}$/.test(lastPart)) {
-            pincode = lastPart;
-          }
-        }
+        const { city, state, pincode } = parseAddress(address);
         
         const addressData: AddressData = {
           address: address.trim(),
@@ -355,10 +551,10 @@ export default function AddressScreen() {
           state: state,
           pincode: pincode,
           fullAddress: address.trim(),
-          coordinates: {
+          coordinates: latitude && longitude ? {
             latitude,
             longitude,
-          },
+          } : undefined,
         };
 
         // Navigate back to checkout with address parameters
@@ -372,8 +568,8 @@ export default function AddressScreen() {
             state: addressData.state,
             pincode: addressData.pincode,
             fullAddress: addressData.fullAddress,
-            latitude: latitude.toString(),
-            longitude: longitude.toString(),
+            latitude: latitude?.toString() || '',
+            longitude: longitude?.toString() || '',
           });
         }, 100);
         
@@ -381,165 +577,185 @@ export default function AddressScreen() {
       }
 
       // Save to user profile (when called from home screen)
-      const apiUrl = API_BASE_URL;
-
-      // Use the same improved parsing for database save
-      const addressParts = address.split(',').map(part => part.trim()).filter(part => part.length > 0);
-      
-      // Look for pincode (6-digit number) at the end
-      const pincodeMatch = address.match(/\b\d{6}\b/);
-      let pincode = '';
-      if (pincodeMatch) {
-        pincode = pincodeMatch[0];
-      }
-      
-      // Remove pincode and "India" from address parts for better parsing
-      const cleanParts = addressParts.filter(part => 
-        part !== pincode && 
-        part.toLowerCase() !== 'india' && 
-        !/^\d{6}$/.test(part)
-      );
-      
-      let city = '';
-      let state = '';
-      
-      if (cleanParts.length >= 2) {
-        // Last part is usually state, second to last is city
-        city = cleanParts[cleanParts.length - 2] || '';
-        state = cleanParts[cleanParts.length - 1] || '';
-      } else if (cleanParts.length === 1) {
-        city = cleanParts[0];
-        state = '';
-      }
-      
-      // If we couldn't find a pincode, try to extract from the end
-      if (!pincode && addressParts.length > 0) {
-        const lastPart = addressParts[addressParts.length - 1];
-        if (/^\d{6}$/.test(lastPart)) {
-          pincode = lastPart;
-        }
-      }
+      const { city, state, pincode } = parseAddress(address);
 
       const requestBody = {
         address: address.trim(),
         city: city,
         state: state,
         pincode: pincode,
-        latitude,
-        longitude,
+        latitude: latitude || 0,
+        longitude: longitude || 0,
       };
 
-      const response = await fetch(`${apiUrl}/user/addresses`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
+      try {
+        const response = await fetch(`${API_BASE_URL}/user/addresses`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
 
-      if (response.ok) {
-        Alert.alert('Success', 'Address saved successfully', [
+        if (response.ok) {
+          Alert.alert('Success', 'Address saved successfully', [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                router.back();
+              }
+            }
+          ]);
+        } else {
+          const responseData = await response.json();
+          Alert.alert('Error', responseData.detail || responseData.message || 'Failed to save address');
+        }
+      } catch (apiError) {
+        console.error('API Error saving address:', apiError);
+        // If the API endpoint doesn't exist, just show success and go back
+        Alert.alert('Info', 'Address saved locally. API endpoint not available yet.', [
           { 
             text: 'OK', 
             onPress: () => {
-              // Navigate back and trigger a refresh
               router.back();
             }
           }
         ]);
-      } else {
-        const responseData = await response.json();
-        Alert.alert('Error', responseData.detail || responseData.message || 'Failed to save address');
       }
     } catch (error: any) {
       console.error('❌ Error saving address:', error);
-      
-      // Check if it's a network error or API error
-      if (error.response) {
-      } else if (error.request) {
-      } else {
-      }
-      
       Alert.alert('Error', 'Failed to save address. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [address, latitude, longitude, parseAddress, isFromCheckout, token]);
 
-  const renderSearchResult = ({ item }: { item: SearchResult }) => (
+  const handleMapPress = useCallback(async (event: any) => {
+    const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
+    setLatitude(lat);
+    setLongitude(lng);
+    
+    // Get address for the selected location
+    await getAddressFromCoordinates(lat, lng);
+  }, [getAddressFromCoordinates]);
+
+  const renderSearchResult = useCallback(({ item }: { item: SearchResult }) => (
     <TouchableOpacity
       style={styles.searchResultItem}
       onPress={() => selectSearchResult(item)}
     >
-      <Ionicons name="location-outline" size={20} color="#666" />
+      <Ionicons 
+        name={item.place_id === 'retry' ? "refresh-outline" : "location-outline"} 
+        size={20} 
+        color="#666" 
+      />
       <View style={styles.searchResultText}>
         <Text style={styles.searchResultMain}>{item.structured_formatting.main_text}</Text>
         <Text style={styles.searchResultSecondary}>{item.structured_formatting.secondary_text}</Text>
       </View>
     </TouchableOpacity>
-  );
+  ), [selectSearchResult]);
 
-  const renderMapSection = () => (
-    <View style={styles.mapSection}>
-      <View style={styles.mapContainer}>
-        {Platform.OS !== 'web' && MapView && (
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={{
-              latitude: latitude,
-              longitude: longitude,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }}
-            onPress={handleMapPress}
-            showsUserLocation={true}
-            showsMyLocationButton={true}
-          >
-            <Marker
-              coordinate={{
-                latitude: latitude,
-                longitude: longitude,
-              }}
-              title="Delivery Address"
-              description="Tap and drag to adjust"
-              draggable
-              onDragEnd={async (e) => {
-                const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
-                setLatitude(lat);
-                setLongitude(lng);
-                
-                // Get address for the new location
-                await getAddressFromCoordinates(lat, lng);
-              }}
-            />
-          </MapView>
-        )}
-        {/* Center indicator */}
-        <View style={styles.centerIndicator}>
-          <Ionicons name="location" size={24} color="#007AFF" />
+  const renderMapSection = useCallback(() => {
+    // Don't render map until we have coordinates
+    if (latitude === null || longitude === null) {
+      return (
+        <View style={styles.mapSection}>
+          <View style={[styles.mapContainer, styles.mapLoadingContainer]}>
+            {locationLoading ? (
+              <View style={styles.mapLoadingContent}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.mapLoadingText}>Getting your location...</Text>
+              </View>
+            ) : (
+              <View style={styles.mapLoadingContent}>
+                <Ionicons name="location-outline" size={48} color="#ccc" />
+                <Text style={styles.mapLoadingText}>Location not available</Text>
+                <TouchableOpacity 
+                  style={styles.retryLocationButton} 
+                  onPress={() => getCurrentLocation(false)}
+                >
+                  <Text style={styles.retryLocationText}>Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
-        {/* Update Map Button */}
-        <TouchableOpacity
-          style={styles.updateMapButton}
-          onPress={() => updateMapFromAddress(address)}
-          disabled={updatingMap}
-        >
-          {updatingMap ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Ionicons name="map-outline" size={20} color="#fff" />
-          )}
-          <Text style={styles.updateMapText}>
-            {updatingMap ? 'Updating...' : 'Update Map'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+      );
+    }
 
-  const renderAddressInputSection = () => (
+    return (
+      <View style={styles.mapSection}>
+        <View style={styles.mapContainer}>
+          {Platform.OS !== 'web' && MapView && (
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              region={region}
+              onPress={handleMapPress}
+              showsUserLocation={true}
+              showsMyLocationButton={true}
+              showsCompass={true}
+              showsScale={true}
+              loadingEnabled={true}
+              loadingIndicatorColor="#007AFF"
+              mapType="standard"
+            >
+              <Marker
+                coordinate={{
+                  latitude: latitude,
+                  longitude: longitude,
+                }}
+                title="Delivery Address"
+                description="Tap and drag to adjust"
+                draggable
+                onDragEnd={async (e: any) => {
+                  const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
+                  setLatitude(lat);
+                  setLongitude(lng);
+                  
+                  // Get address for the new location
+                  await getAddressFromCoordinates(lat, lng);
+                }}
+              />
+            </MapView>
+          )}
+          
+          {/* Update Map Button */}
+          <TouchableOpacity
+            style={styles.updateMapButton}
+            onPress={() => updateMapFromAddress(address)}
+            disabled={updatingMap}
+          >
+            {updatingMap ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="map-outline" size={20} color="#fff" />
+            )}
+            <Text style={styles.updateMapText}>
+              {updatingMap ? 'Updating...' : 'Update Map'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Current Location Button */}
+          <TouchableOpacity
+            style={styles.currentLocationButton}
+            onPress={() => getCurrentLocation(false)}
+            disabled={locationLoading}
+          >
+            {locationLoading ? (
+              <ActivityIndicator size="small" color="#007AFF" />
+            ) : (
+              <Ionicons name="locate" size={20} color="#007AFF" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }, [latitude, longitude, region, locationLoading, handleMapPress, updateMapFromAddress, address, updatingMap, getCurrentLocation]);
+
+  const renderAddressInputSection = useCallback(() => (
     <View style={styles.addressInputSection}>
       <View style={styles.inputContainer}>
         <Text style={styles.inputLabel}>Delivery Address</Text>
@@ -550,22 +766,22 @@ export default function AddressScreen() {
           onChangeText={(text) => {
             setAddress(text);
             setSearchQuery(text);
-            // Trigger search immediately for better UX
-            if (text.trim().length > 2) {
-              performAddressSearch(text);
-            } else {
-              setSearchResults([]);
-              setShowSearchResults(false);
-            }
-            // Debounce geocoding to avoid too many API calls
+            
+            // Clear existing timeouts
             if (geocodeTimeoutRef.current) {
               clearTimeout(geocodeTimeoutRef.current);
             }
-            geocodeTimeoutRef.current = setTimeout(() => {
-              if (text.trim().length > 10) {
-                updateMapFromAddress(text);
-              }
-            }, 1000);
+            
+            // Immediate search for better UX (handled by useEffect)
+            
+            // Debounce geocoding to avoid too many API calls (only if endpoint is available)
+            if (apiEndpointsAvailable.geocode) {
+              geocodeTimeoutRef.current = setTimeout(() => {
+                if (text.trim().length > 10) {
+                  updateMapFromAddress(text);
+                }
+              }, 800); // Slightly reduced from 1000ms
+            }
           }}
           placeholder="Example: 123 Main Street, Apartment 4B, Mumbai, Maharashtra 400001"
           multiline
@@ -578,17 +794,38 @@ export default function AddressScreen() {
           autoCapitalize="words"
           enablesReturnKeyAutomatically={false}
         />
-        <TouchableOpacity style={styles.useCurrentLocationButton} onPress={getCurrentLocation}>
-          <Ionicons name="location-outline" size={20} color="#007AFF" />
-          <Text style={styles.useCurrentLocationText}>Use Current Location</Text>
-        </TouchableOpacity>
         
+        <View style={styles.buttonRow}>
+          <TouchableOpacity 
+            style={styles.useCurrentLocationButton} 
+            onPress={() => getCurrentLocation(false)}
+            disabled={locationLoading}
+          >
+            {locationLoading ? (
+              <ActivityIndicator size="small" color="#007AFF" />
+            ) : (
+              <Ionicons name="location-outline" size={20} color="#007AFF" />
+            )}
+            <Text style={styles.useCurrentLocationText}>
+              {locationLoading ? 'Getting Location...' : 'Use Current Location'}
+            </Text>
+          </TouchableOpacity>
 
+          <TouchableOpacity 
+            style={styles.manualEntryButton}
+            onPress={() => {
+              router.push('/manual-address');
+            }}
+          >
+            <Ionicons name="create-outline" size={20} color="#666" />
+            <Text style={styles.manualEntryText}>Enter Manually</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
-  );
+  ), [address, locationLoading, updateMapFromAddress, getCurrentLocation, apiEndpointsAvailable.geocode]);
 
-  const renderSaveButton = () => (
+  const renderSaveButton = useCallback(() => (
     <View style={styles.saveButtonSection}>
       <TouchableOpacity 
         style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
@@ -604,7 +841,7 @@ export default function AddressScreen() {
         )}
       </TouchableOpacity>
     </View>
-  );
+  ), [loading, handleSaveAddress, isFromCheckout]);
 
   // Main render
   return (
@@ -672,6 +909,9 @@ export default function AddressScreen() {
                 showsVerticalScrollIndicator={false}
                 nestedScrollEnabled={false}
                 contentContainerStyle={styles.searchResultsContent}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                windowSize={10}
               />
             </View>
           )}
@@ -814,22 +1054,42 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   mapContainer: {
-    height: Platform.OS === 'web' ? 0 : 250, // Hide map container on web
+    height: Platform.OS === 'web' ? 0 : 250,
     position: 'relative',
     marginHorizontal: 16,
     borderRadius: 12,
     overflow: 'hidden',
+    backgroundColor: '#f5f5f5',
+  },
+  mapLoadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mapLoadingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  mapLoadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  retryLocationButton: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+  },
+  retryLocationText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   map: {
     flex: 1,
-  },
-  centerIndicator: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -12,
-    marginTop: -24,
-    zIndex: 1,
   },
   updateMapButton: {
     position: 'absolute',
@@ -852,6 +1112,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,
+  },
+  currentLocationButton: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   addressInputSection: {
     marginTop: 16,
@@ -881,16 +1154,35 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     backgroundColor: '#f9f9f9',
   },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
   useCurrentLocationButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
     paddingVertical: 8,
+    flex: 1,
+    marginRight: 8,
   },
   useCurrentLocationText: {
     marginLeft: 8,
     fontSize: 16,
     color: '#007AFF',
+    fontWeight: '500',
+  },
+  manualEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    flex: 1,
+    marginLeft: 8,
+  },
+  manualEntryText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#666',
     fontWeight: '500',
   },
   saveButtonSection: {

@@ -8,13 +8,16 @@ import { useEffect } from 'react';
 
 import { useColorScheme } from '../hooks/useColorScheme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import testApiConnection from '../test-api-connection';
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -36,8 +39,6 @@ function RootLayoutNav() {
 
     testConnection();
   }, []);
-
-
 
   // Add error handling for initialization
   try {

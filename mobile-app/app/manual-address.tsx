@@ -65,6 +65,19 @@ const ManualAddressScreen = () => {
 
     // Navigate back with address data
     router.back();
+    
+    // Use a timeout to ensure the navigation completes before setting params
+    setTimeout(() => {
+      router.setParams({
+        address: addressData.address,
+        city: addressData.city,
+        state: addressData.state,
+        pincode: addressData.pincode,
+        fullAddress: addressData.fullAddress,
+        latitude: '', // Manual entry doesn't have coordinates
+        longitude: '', // Manual entry doesn't have coordinates
+      });
+    }, 100);
   };
 
   return (
@@ -248,4 +261,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ManualAddressScreen; 
+export default ManualAddressScreen;
