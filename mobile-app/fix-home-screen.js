@@ -40,7 +40,7 @@ const FixHomeScreen = () => {
       setStep('checking_tabs');
       // Check if user role is valid for tab navigation
       const userRole = authContext?.user?.role || 'Not set';
-      const isValidRole = userRole === 'user' || userRole === 'partner' || userRole === 'admin';
+      const isValidRole = userRole === 'customer' || userRole === 'delivery_partner' || userRole === 'admin';
       
       // Compile results
       setDiagnosticResults({

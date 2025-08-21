@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react'; // ✅ Added useCallback import
 import {
   View,
   Text,
@@ -18,15 +18,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ✅ Fix React Native Maps import to prevent duplicate registration
 let MapView: any, Marker: any;
-if (Platform.OS !== 'web') {
-  MapView = require('react-native-maps').default;
-  Marker = require('react-native-maps').Marker;
+try {
+  if (Platform.OS !== 'web') {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default;
+    Marker = Maps.Marker;
+  }
+} catch (error) {
+  console.log('Maps not available:', error);
+  MapView = null;
+  Marker = null;
 }
+
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
-import { reverseGeocode, searchAddresses, geocodeAddress } from '../services/api';
-import { API_BASE_URL, IMAGE_BASE_URL } from '../config/apiConfig';
+import { searchAddresses, geocodeAddress, reverseGeocode } from '../services/api'; // ✅ Use your existing services
+import { API_BASE_URL } from '../config/apiConfig';
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,7 +67,6 @@ export default function AddressScreen() {
   const isFromCheckout = params.from === 'checkout';
   
   const [address, setAddress] = useState('');
-  // Initialize with null to indicate location not yet determined
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [region, setRegion] = useState<any>(null);
@@ -82,80 +91,105 @@ export default function AddressScreen() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const locationCacheRef = useRef<{location: any, timestamp: number} | null>(null);
 
+  // ✅ Fixed performAddressSearch with proper error handling
   const performAddressSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
     
-    // Skip API call if we know the endpoint isn't available
-    if (!apiEndpointsAvailable.search) {
-      setSearchResults([{
-        place_id: 'manual',
-        description: query,
-        structured_formatting: {
-          main_text: query,
-          secondary_text: 'Enter manually'
-        }
-      }]);
-      setShowSearchResults(true);
-      return;
-    }
+    console.log('🔍 Starting address search for:', query);
     
     setSearching(true);
     try {
+      console.log('📡 Calling search API through service...');
       const data = await searchAddresses(query);
+      console.log('📋 Search API returned:', data);
       
-      if (data.predictions && data.predictions.length > 0) {
+      if (data && data.predictions && Array.isArray(data.predictions) && data.predictions.length > 0) {
+        console.log('✅ Got', data.predictions.length, 'predictions');
         setSearchResults(data.predictions);
         setShowSearchResults(true);
+        
+        // Mark search as working
+        setApiEndpointsAvailable(prev => ({ ...prev, search: true }));
       } else {
-        // Create a simple suggestion based on the query
-        setSearchResults([{
-          place_id: 'manual',
-          description: query,
-          structured_formatting: {
-            main_text: query,
-            secondary_text: 'Enter manually'
+        console.log('⚠️ No predictions returned from API');
+        
+        // Create fallback results
+        const fallbackResults: SearchResult[] = [
+          {
+            place_id: 'manual',
+            description: query,
+            structured_formatting: {
+              main_text: query,
+              secondary_text: 'Enter this address manually'
+            }
           }
-        }]);
+        ];
+        
+        // Add some common cities if query matches
+        const commonCities = [
+          { name: 'Mumbai', state: 'Maharashtra' },
+          { name: 'Delhi', state: 'Delhi' },
+          { name: 'Bangalore', state: 'Karnataka' },
+          { name: 'Chennai', state: 'Tamil Nadu' },
+          { name: 'Kolkata', state: 'West Bengal' },
+          { name: 'Pune', state: 'Maharashtra' },
+          { name: 'Hyderabad', state: 'Telangana' },
+        ];
+        
+        commonCities.forEach(city => {
+          if (city.name.toLowerCase().includes(query.toLowerCase()) || 
+              query.toLowerCase().includes(city.name.toLowerCase())) {
+            fallbackResults.unshift({
+              place_id: `city_${city.name.toLowerCase()}`,
+              description: `${city.name}, ${city.state}, India`,
+              structured_formatting: {
+                main_text: city.name,
+                secondary_text: `${city.state}, India`
+              }
+            });
+          }
+        });
+        
+        setSearchResults(fallbackResults);
         setShowSearchResults(true);
       }
     } catch (error: any) {
-      console.error('Search error:', error);
+      console.error('❌ Search error:', error);
       
-      // If it's a 404, mark the endpoint as unavailable
+      // Check error type and mark endpoints accordingly
       if (error.response?.status === 404) {
+        console.log('🚫 404 error - marking search endpoint as unavailable');
         setApiEndpointsAvailable(prev => ({ ...prev, search: false }));
       }
       
-      // Provide helpful fallback options
-      setSearchResults([
-        {
-          place_id: 'manual',
-          description: query,
-          structured_formatting: {
-            main_text: query,
-            secondary_text: 'Enter manually'
-          }
+      // Always provide a manual entry option
+      setSearchResults([{
+        place_id: 'manual_fallback',
+        description: query,
+        structured_formatting: {
+          main_text: query,
+          secondary_text: 'Search failed - enter manually'
         }
-      ]);
+      }]);
       setShowSearchResults(true);
     } finally {
       setSearching(false);
     }
-  }, [apiEndpointsAvailable.search]);
+  }, []);
 
   const updateMapFromAddress = useCallback(async (addressText: string) => {
     if (!addressText.trim()) return;
     
-    // Skip API call if we know the endpoint isn't available
-    if (!apiEndpointsAvailable.geocode) {
-      return;
-    }
+    console.log('🗺️ Updating map from address:', addressText);
     
     setUpdatingMap(true);
     try {
+      console.log('📡 Calling geocoding API through service...');
       const data = await geocodeAddress(addressText);
+      console.log('📋 Geocoding API returned:', data);
       
-      if (data.latitude && data.longitude) {
+      if (data && data.latitude && data.longitude) {
+        console.log('✅ Got coordinates:', data.latitude, data.longitude);
         setLatitude(data.latitude);
         setLongitude(data.longitude);
         setRegion({
@@ -166,7 +200,7 @@ export default function AddressScreen() {
         });
         
         // Animate map to new location if map exists
-        if (mapRef.current && Platform.OS !== 'web') {
+        if (mapRef.current && Platform.OS !== 'web' && MapView) {
           (mapRef.current as any).animateToRegion({
             latitude: data.latitude,
             longitude: data.longitude,
@@ -174,33 +208,27 @@ export default function AddressScreen() {
             longitudeDelta: 0.01,
           }, 1000);
         }
+        
+        // Mark geocoding as working
+        setApiEndpointsAvailable(prev => ({ ...prev, geocode: true }));
       } else {
-        // Mark geocoding as unavailable if it returns null coordinates
-        if (data.latitude === null) {
-          setApiEndpointsAvailable(prev => ({ ...prev, geocode: false }));
-        }
+        console.log('⚠️ No coordinates returned from geocoding');
+        setApiEndpointsAvailable(prev => ({ ...prev, geocode: false }));
       }
     } catch (error: any) {
-      console.error('Error updating map from address:', error);
+      console.error('❌ Geocoding error:', error);
       
-      // If it's a 404, mark the endpoint as unavailable
       if (error.response?.status === 404) {
         setApiEndpointsAvailable(prev => ({ ...prev, geocode: false }));
       }
     } finally {
       setUpdatingMap(false);
     }
-  }, [apiEndpointsAvailable.geocode]);
+  }, []);
 
   const selectSearchResult = useCallback(async (result: SearchResult) => {
-    if (result.place_id === 'retry') {
-      // Handle retry option
-      const originalQuery = searchQuery;
-      setSearching(true);
-      await performAddressSearch(originalQuery);
-      return;
-    }
-
+    console.log('📍 Selected search result:', result);
+    
     setSearchQuery(result.description);
     setAddress(result.description);
     setShowSearchResults(false);
@@ -208,56 +236,16 @@ export default function AddressScreen() {
     Keyboard.dismiss();
     
     // Try to update map coordinates for the selected address
-    if (apiEndpointsAvailable.geocode) {
-      await updateMapFromAddress(result.description);
-    } else {
-      // If geocoding not available, try to match with known cities
-      const cityCoordinates = {
-        'mumbai': { latitude: 19.0760, longitude: 72.8777 },
-        'delhi': { latitude: 28.7041, longitude: 77.1025 },
-        'bangalore': { latitude: 12.9716, longitude: 77.5946 },
-        'hyderabad': { latitude: 17.3850, longitude: 78.4867 },
-        'ahmedabad': { latitude: 23.0225, longitude: 72.5714 },
-        'chennai': { latitude: 13.0827, longitude: 80.2707 },
-        'kolkata': { latitude: 22.5726, longitude: 88.3639 },
-        'pune': { latitude: 18.5204, longitude: 73.8567 },
-        'jaipur': { latitude: 26.9124, longitude: 75.7873 },
-        'lucknow': { latitude: 26.8467, longitude: 80.9462 },
-      };
-      
-      const addressLower = result.description.toLowerCase();
-      for (const [city, coords] of Object.entries(cityCoordinates)) {
-        if (addressLower.includes(city)) {
-          setLatitude(coords.latitude);
-          setLongitude(coords.longitude);
-          setRegion({
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
-          
-          // Animate map to new location if map exists
-          if (mapRef.current && Platform.OS !== 'web') {
-            (mapRef.current as any).animateToRegion({
-              latitude: coords.latitude,
-              longitude: coords.longitude,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }, 1000);
-          }
-          break;
-        }
-      }
-    }
-  }, [searchQuery, performAddressSearch, updateMapFromAddress, apiEndpointsAvailable.geocode]);
+    await updateMapFromAddress(result.description);
+  }, [updateMapFromAddress]);
 
   const getAddressFromCoordinates = useCallback(async (lat: number, lng: number, isInitial = false) => {
+    console.log('🔄 Getting address from coordinates:', lat, lng);
+    
     try {
-      // For initial load, try faster method first
+      // For initial load, try device's reverse geocoding first for speed
       if (isInitial) {
         try {
-          // Use device's reverse geocoding for faster initial load
           const addressResponse = await Location.reverseGeocodeAsync({
             latitude: lat,
             longitude: lng,
@@ -273,88 +261,45 @@ export default function AddressScreen() {
               addr.postalCode,
             ].filter(Boolean).join(', ');
             
+            console.log('✅ Got address from device:', fullAddress);
             setAddress(fullAddress);
             setSearchQuery(fullAddress);
-            
-            // Try backend API in background for better accuracy (only if available)
-            if (apiEndpointsAvailable.reverseGeocode) {
-              setTimeout(async () => {
-                try {
-                  const data = await reverseGeocode(lat, lng);
-                  if (data && data.formattedAddress && data.formattedAddress !== fullAddress) {
-                    setAddress(data.formattedAddress);
-                    setSearchQuery(data.formattedAddress);
-                  }
-                } catch (error: any) {
-                  // If 404, mark as unavailable
-                  if (error.response?.status === 404) {
-                    setApiEndpointsAvailable(prev => ({ ...prev, reverseGeocode: false }));
-                  }
-                }
-              }, 1000);
-            }
-            
             return;
           }
         } catch (expoError) {
-          console.log('Expo geocoding failed:', expoError);
+          console.log('Device geocoding failed:', expoError);
         }
       }
 
-      // Primary method: try backend API first (only if available)
+      // Try your backend API
       if (apiEndpointsAvailable.reverseGeocode) {
         try {
+          console.log('📡 Calling reverse geocoding API through service...');
           const data = await reverseGeocode(lat, lng);
+          console.log('📋 Reverse geocoding API returned:', data);
           
           if (data && data.formattedAddress) {
+            console.log('✅ Got address from API:', data.formattedAddress);
             setAddress(data.formattedAddress);
             setSearchQuery(data.formattedAddress);
+            setApiEndpointsAvailable(prev => ({ ...prev, reverseGeocode: true }));
             return;
           }
         } catch (backendError: any) {
-          // If 404, mark as unavailable
+          console.error('❌ Backend reverse geocoding failed:', backendError);
           if (backendError.response?.status === 404) {
             setApiEndpointsAvailable(prev => ({ ...prev, reverseGeocode: false }));
           }
         }
       }
       
-      // Fallback: Use Expo Location for reverse geocoding
-      try {
-        const addressResponse = await Location.reverseGeocodeAsync({
-          latitude: lat,
-          longitude: lng,
-        });
-
-        if (addressResponse.length > 0) {
-          const addr = addressResponse[0];
-          const fullAddress = [
-            addr.street,
-            addr.district,
-            addr.city,
-            addr.region,
-            addr.postalCode,
-          ].filter(Boolean).join(', ');
-          
-          setAddress(fullAddress);
-          setSearchQuery(fullAddress);
-        } else {
-          // If no address found, create a basic one from coordinates
-          const basicAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-          setAddress(basicAddress);
-          setSearchQuery(basicAddress);
-        }
-      } catch (expoError) {
-        console.error('All geocoding methods failed:', expoError);
-        // Last resort: coordinate-based address
-        const fallbackAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-        setAddress(fallbackAddress);
-        setSearchQuery(fallbackAddress);
-      }
+      // Final fallback: coordinate-based address
+      const fallbackAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      console.log('⚠️ Using fallback address:', fallbackAddress);
+      setAddress(fallbackAddress);
+      setSearchQuery(fallbackAddress);
     } catch (error) {
-      console.error('Error getting address from coordinates:', error);
-      
-      // Last resort: create address from coordinates
+      console.error('❌ All address methods failed:', error);
       const fallbackAddress = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       setAddress(fallbackAddress);
       setSearchQuery(fallbackAddress);
@@ -387,7 +332,7 @@ export default function AddressScreen() {
       if (status !== 'granted') {
         setLocationPermissionDenied(true);
         setLocationLoading(false);
-        // Fallback to a major city center (Mumbai) instead of geographic center
+        // Fallback to Mumbai
         const fallbackLat = 19.0760;
         const fallbackLng = 72.8777;
         setLatitude(fallbackLat);
@@ -395,7 +340,7 @@ export default function AddressScreen() {
         setRegion({
           latitude: fallbackLat,
           longitude: fallbackLng,
-          latitudeDelta: 0.1, // Wider view for fallback
+          latitudeDelta: 0.1,
           longitudeDelta: 0.1,
         });
         Alert.alert(
@@ -406,7 +351,6 @@ export default function AddressScreen() {
         return;
       }
 
-      // Use high accuracy for initial location
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
@@ -428,8 +372,8 @@ export default function AddressScreen() {
         longitudeDelta: 0.01,
       });
 
-      // Get address from coordinates with optimized approach
-      await getAddressFromCoordinates(lat, lng, true); // isInitial = true
+      // Get address from coordinates
+      await getAddressFromCoordinates(lat, lng, true);
       
     } catch (error: any) {
       console.error('Error getting location:', error);
@@ -456,43 +400,6 @@ export default function AddressScreen() {
     }
   }, [getAddressFromCoordinates]);
 
-  useEffect(() => {
-    // Get current location immediately on component mount
-    getCurrentLocation(false); // Don't use cache on initial load
-    
-    // Cleanup function to clear timeouts
-    return () => {
-      if (geocodeTimeoutRef.current) {
-        clearTimeout(geocodeTimeoutRef.current);
-      }
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [getCurrentLocation, token, user]);
-
-  // Optimized search with reduced debounce time
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    if (searchQuery.length > 2) {
-      searchTimeoutRef.current = setTimeout(() => {
-        performAddressSearch(searchQuery);
-      }, 200); // Reduced from 300ms to 200ms for faster response
-    } else {
-      setSearchResults([]);
-      setShowSearchResults(false);
-    }
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchQuery]);
-
   const parseAddress = useCallback((addressText: string) => {
     const addressParts = addressText.split(',').map(part => part.trim()).filter(part => part.length > 0);
     
@@ -500,7 +407,7 @@ export default function AddressScreen() {
     let state = '';
     let pincode = '';
     
-    // Look for pincode (6-digit number) at the end
+    // Look for pincode (6-digit number)
     const pincodeMatch = addressText.match(/\b\d{6}\b/);
     if (pincodeMatch) {
       pincode = pincodeMatch[0];
@@ -514,20 +421,11 @@ export default function AddressScreen() {
     );
     
     if (cleanParts.length >= 2) {
-      // Last part is usually state, second to last is city
       city = cleanParts[cleanParts.length - 2] || '';
       state = cleanParts[cleanParts.length - 1] || '';
     } else if (cleanParts.length === 1) {
       city = cleanParts[0];
       state = '';
-    }
-    
-    // If we couldn't find a pincode, try to extract from the end
-    if (!pincode && addressParts.length > 0) {
-      const lastPart = addressParts[addressParts.length - 1];
-      if (/^\d{6}$/.test(lastPart)) {
-        pincode = lastPart;
-      }
     }
     
     return { city, state, pincode };
@@ -542,7 +440,7 @@ export default function AddressScreen() {
     setLoading(true);
     try {
       if (isFromCheckout) {
-        // For checkout flow, create address data and navigate back with parameters
+        // For checkout flow, create address data and navigate back
         const { city, state, pincode } = parseAddress(address);
         
         const addressData: AddressData = {
@@ -557,10 +455,12 @@ export default function AddressScreen() {
           } : undefined,
         };
 
+        console.log('💾 Saving address for checkout:', addressData);
+
         // Navigate back to checkout with address parameters
         router.back();
         
-        // Use a timeout to ensure the navigation completes before setting params
+        // Set params for checkout screen
         setTimeout(() => {
           router.setParams({
             address: addressData.address,
@@ -576,7 +476,7 @@ export default function AddressScreen() {
         return;
       }
 
-      // Save to user profile (when called from home screen)
+      // Save to user profile (when called from profile/settings)
       const { city, state, pincode } = parseAddress(address);
 
       const requestBody = {
@@ -588,8 +488,10 @@ export default function AddressScreen() {
         longitude: longitude || 0,
       };
 
+      console.log('💾 Saving address to profile:', requestBody);
+
       try {
-        const response = await fetch(`${API_BASE_URL}/user/addresses`, {
+        const response = await fetch(`${API_BASE_URL.replace('/api', '')}/user/address`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -613,7 +515,6 @@ export default function AddressScreen() {
         }
       } catch (apiError) {
         console.error('API Error saving address:', apiError);
-        // If the API endpoint doesn't exist, just show success and go back
         Alert.alert('Info', 'Address saved locally. API endpoint not available yet.', [
           { 
             text: 'OK', 
@@ -633,6 +534,7 @@ export default function AddressScreen() {
 
   const handleMapPress = useCallback(async (event: any) => {
     const { latitude: lat, longitude: lng } = event.nativeEvent.coordinate;
+    console.log('🗺️ Map pressed at:', lat, lng);
     setLatitude(lat);
     setLongitude(lng);
     
@@ -640,13 +542,50 @@ export default function AddressScreen() {
     await getAddressFromCoordinates(lat, lng);
   }, [getAddressFromCoordinates]);
 
+  // ✅ Effect to fetch current location on mount
+  useEffect(() => {
+    console.log('🚀 AddressScreen mounted');
+    getCurrentLocation(false);
+    
+    return () => {
+      if (geocodeTimeoutRef.current) {
+        clearTimeout(geocodeTimeoutRef.current);
+      }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // ✅ Effect for search with proper debouncing
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchQuery.length > 2) {
+      searchTimeoutRef.current = setTimeout(() => {
+        performAddressSearch(searchQuery);
+      }, 300);
+    } else {
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, performAddressSearch]);
+
   const renderSearchResult = useCallback(({ item }: { item: SearchResult }) => (
     <TouchableOpacity
       style={styles.searchResultItem}
       onPress={() => selectSearchResult(item)}
     >
       <Ionicons 
-        name={item.place_id === 'retry' ? "refresh-outline" : "location-outline"} 
+        name="location-outline" 
         size={20} 
         color="#666" 
       />
@@ -702,23 +641,23 @@ export default function AddressScreen() {
               loadingIndicatorColor="#007AFF"
               mapType="standard"
             >
-              <Marker
-                coordinate={{
-                  latitude: latitude,
-                  longitude: longitude,
-                }}
-                title="Delivery Address"
-                description="Tap and drag to adjust"
-                draggable
-                onDragEnd={async (e: any) => {
-                  const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
-                  setLatitude(lat);
-                  setLongitude(lng);
-                  
-                  // Get address for the new location
-                  await getAddressFromCoordinates(lat, lng);
-                }}
-              />
+              {Marker && (
+                <Marker
+                  coordinate={{
+                    latitude: latitude,
+                    longitude: longitude,
+                  }}
+                  title="Delivery Address"
+                  description="Tap and drag to adjust"
+                  draggable
+                  onDragEnd={async (e: any) => {
+                    const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
+                    setLatitude(lat);
+                    setLongitude(lng);
+                    await getAddressFromCoordinates(lat, lng);
+                  }}
+                />
+              )}
             </MapView>
           )}
           
@@ -772,15 +711,13 @@ export default function AddressScreen() {
               clearTimeout(geocodeTimeoutRef.current);
             }
             
-            // Immediate search for better UX (handled by useEffect)
-            
-            // Debounce geocoding to avoid too many API calls (only if endpoint is available)
+            // Debounce geocoding
             if (apiEndpointsAvailable.geocode) {
               geocodeTimeoutRef.current = setTimeout(() => {
                 if (text.trim().length > 10) {
                   updateMapFromAddress(text);
                 }
-              }, 800); // Slightly reduced from 1000ms
+              }, 1000);
             }
           }}
           placeholder="Example: 123 Main Street, Apartment 4B, Mumbai, Maharashtra 400001"
@@ -792,7 +729,6 @@ export default function AddressScreen() {
           blurOnSubmit={false}
           autoCorrect={false}
           autoCapitalize="words"
-          enablesReturnKeyAutomatically={false}
         />
         
         <View style={styles.buttonRow}>
@@ -862,7 +798,7 @@ export default function AddressScreen() {
           <View style={styles.placeholder} />
         </View>
 
-        {/* Search Section - Fixed Position */}
+        {/* Search Section */}
         <View style={styles.searchSection}>
           <View style={styles.searchContainer}>
             <View style={styles.searchInputContainer}>
@@ -897,7 +833,7 @@ export default function AddressScreen() {
             </View>
           </View>
 
-          {/* Auto-complete Results - Fixed Position */}
+          {/* Search Results */}
           {showSearchResults && searchResults.length > 0 && (
             <View style={styles.searchResultsContainer}>
               <FlatList
@@ -907,9 +843,7 @@ export default function AddressScreen() {
                 style={styles.searchResultsList}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                nestedScrollEnabled={false}
-                contentContainerStyle={styles.searchResultsContent}
-                removeClippedSubviews={true}
+                removeClippedSubviews={false}
                 maxToRenderPerBatch={10}
                 windowSize={10}
               />
@@ -917,7 +851,7 @@ export default function AddressScreen() {
           )}
         </View>
 
-        {/* Main Content - Scrollable */}
+        {/* Main Content */}
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
@@ -925,7 +859,6 @@ export default function AddressScreen() {
           keyboardDismissMode="interactive"
           contentContainerStyle={styles.scrollContent}
           bounces={false}
-          nestedScrollEnabled={false}
         >
           {renderMapSection()}
           {renderAddressInputSection()}
@@ -936,6 +869,7 @@ export default function AddressScreen() {
   );
 }
 
+// Your existing styles...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1024,9 +958,6 @@ const styles = StyleSheet.create({
   },
   searchResultsList: {
     maxHeight: 300,
-  },
-  searchResultsContent: {
-    paddingVertical: 8,
   },
   searchResultItem: {
     flexDirection: 'row',

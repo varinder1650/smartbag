@@ -9,7 +9,8 @@ import { useEffect } from 'react';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import testApiConnection from '../test-api-connection';
+// import EnhancedApiDebugger from '../components/EnhancedApiDebugger';
+// import testApiConnection from '../test-api-connection';
 
 export default function RootLayout() {
   return (
@@ -28,17 +29,6 @@ function RootLayoutNav() {
   });
 
   const { token, loading } = useAuth();
-
-  // Test API connection on component mount
-  useEffect(() => {
-    const testConnection = async () => {
-      console.log('Testing API connection...');
-      const result = await testApiConnection();
-      console.log('API connection test result:', result);
-    };
-
-    testConnection();
-  }, []);
 
   // Add error handling for initialization
   try {
@@ -76,6 +66,7 @@ function RootLayoutNav() {
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />
+        {/* {__DEV__ && <EnhancedApiDebugger />} */}
       </ThemeProvider>
     );
   } catch (error) {

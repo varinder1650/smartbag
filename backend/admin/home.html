@@ -1,0 +1,238 @@
+<!-- test_admin_websocket.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin WebSocket Tester</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        button { margin: 5px; padding: 5px 10px; }
+        #messages { height: 300px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; }
+        .message { margin: 5px 0; padding: 5px; background: #f0f0f0; }
+        .error { background: #ffe0e0; }
+        .success { background: #e0ffe0; }
+        input, select { margin: 5px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Admin WebSocket Tester</h1>
+    
+    <div class="section">
+        <h2>Connection</h2>
+        <input type="email" id="email" placeholder="admin@example.com" value="admin@example.com">
+        <input type="password" id="password" placeholder="password" value="password">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <span id="status">Disconnected</span>
+    </div>
+    
+    <div class="section">
+        <h2>Subscriptions</h2>
+        <button onclick="subscribe('products')">Subscribe Products</button>
+        <button onclick="subscribe('orders')">Subscribe Orders</button>
+        <button onclick="unsubscribe('products')">Unsubscribe Products</button>
+        <button onclick="unsubscribe('orders')">Unsubscribe Orders</button>
+    </div>
+    
+    <div class="section">
+        <h2>Product Operations</h2>
+        <button onclick="getProducts()">Get Products</button>
+        <button onclick="createProduct()">Create Test Product</button>
+        <button onclick="updateProduct()">Update Test Product</button>
+        <button onclick="deleteProduct()">Delete Test Product</button>
+    </div>
+    
+    <div class="section">
+        <h2>Order Operations</h2>
+        <button onclick="getOrders()">Get Orders</button>
+        <button onclick="updateOrderStatus()">Update Order Status</button>
+    </div>
+    
+    <div class="section">
+        <h2>Other Operations</h2>
+        <button onclick="getCategories()">Get Categories</button>
+        <button onclick="getBrands()">Get Brands</button>
+        <button onclick="getAnalytics()">Get Analytics</button>
+        <button onclick="sendPing()">Send Ping</button>
+    </div>
+    
+    <div class="section">
+        <h2>Messages</h2>
+        <button onclick="clearMessages()">Clear</button>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageCount = 0;
+        
+        function updateStatus(status) {
+            document.getElementById('status').textContent = status;
+        }
+        
+        function addMessage(message, type = '') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.innerHTML = `<strong>#${++messageCount}</strong> ${new Date().toLocaleTimeString()}: <pre>${JSON.stringify(message, null, 2)}</pre>`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+            
+            ws = new WebSocket('ws://localhost:8000/admin/ws');
+            
+            ws.onopen = () => {
+                updateStatus('Connected - Authenticating...');
+                const credentials = {
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                };
+                ws.send(JSON.stringify(credentials));
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'auth_success') {
+                    updateStatus('Authenticated');
+                    addMessage(data, 'success');
+                    localStorage.setItem('admin_token', data.user.token);
+                } else if (data.type === 'error') {
+                    addMessage(data, 'error');
+                } else {
+                    addMessage(data);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                updateStatus('Error');
+                addMessage({type: 'error', message: 'WebSocket error'}, 'error');
+            };
+            
+            ws.onclose = () => {
+                updateStatus('Disconnected');
+                addMessage({type: 'info', message: 'Connection closed'});
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.send(JSON.stringify({type: 'logout'}));
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function sendMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+                addMessage({sent: message});
+            } else {
+                addMessage({error: 'Not connected'}, 'error');
+            }
+        }
+        
+        function subscribe(channel) {
+            sendMessage({type: 'subscribe', channel: channel});
+        }
+        
+        function unsubscribe(channel) {
+            sendMessage({type: 'unsubscribe', channel: channel});
+        }
+        
+        function getProducts() {
+            sendMessage({type: 'get_products'});
+        }
+        
+        function createProduct() {
+            const product = {
+                name: 'Test Product ' + Date.now(),
+                description: 'Test product description',
+                price: 99.99,
+                category: '507f1f77bcf86cd799439011', // Replace with actual category ID
+                brand: '507f1f77bcf86cd799439012', // Replace with actual brand ID
+                stock: 100,
+                images: ['image1.jpg', 'image2.jpg'],
+                is_active: true
+            };
+            sendMessage({type: 'create_product', data: product});
+        }
+        
+        function updateProduct() {
+            const productId = prompt('Enter product ID to update:');
+            if (productId) {
+                sendMessage({
+                    type: 'update_product',
+                    data: {
+                        _id: productId,
+                        price: 149.99,
+                        stock: 50
+                    }
+                });
+            }
+        }
+        
+        function deleteProduct() {
+            const productId = prompt('Enter product ID to delete:');
+            if (productId) {
+                sendMessage({
+                    type: 'delete_product',
+                    data: {productId: productId}
+                });
+            }
+        }
+        
+        function getOrders() {
+            sendMessage({
+                type: 'get_orders',
+                filters: {
+                    status: 'pending'
+                }
+            });
+        }
+        
+        function updateOrderStatus() {
+            const orderId = prompt('Enter order ID:');
+            const status = prompt('Enter new status (pending/processing/completed/cancelled):');
+            if (orderId && status) {
+                sendMessage({
+                    type: 'update_order_status',
+                    data: {
+                        orderId: orderId,
+                        status: status
+                    }
+                });
+            }
+        }
+        
+        function getCategories() {
+            sendMessage({type: 'get_categories'});
+        }
+        
+        function getBrands() {
+            sendMessage({type: 'get_brands'});
+        }
+        
+        function getAnalytics() {
+            sendMessage({
+                type: 'get_analytics',
+                period: 'week'
+            });
+        }
+        
+        function sendPing() {
+            sendMessage({type: 'ping'});
+        }
+        
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+            messageCount = 0;
+        }
+    </script>
+</body>
+</html>

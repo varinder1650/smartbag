@@ -2,13 +2,13 @@
 export const API_CONFIG = {
   // Use your computer's IP address when testing on physical device
   // Use localhost when testing on web or simulator
-  BASE_URL: __DEV__ ? 'http://10.0.0.74:3001/api' : 'http://localhost:3001/api',
+  BASE_URL: __DEV__ ? 'http://10.0.2.2:8000/api' : 'http://localhost:8000/api',
   
   // Alternative configurations to try if IP doesn't work
   ALTERNATIVE_URLS: [
-    'http://10.0.0.74:3001/api',
-    'http://Nitins-MacBook-Air.local:3001/api',
-    'http://localhost:3001/api',
+    // 'http://10.0.0.74:8000/api',
+    'http://Nitins-MacBook-Air.local:8000/api',
+    'http://localhost:8000/api',
     'https://smartbag.onrender.com/api/'
   ],
   

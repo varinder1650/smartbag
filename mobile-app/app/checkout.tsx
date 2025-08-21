@@ -161,7 +161,7 @@ export default function CheckoutScreen() {
         total_amount: getTotal(),
       };
 
-      const response = await fetch(`${API_BASE_URL}/orders/`, {
+      const response = await fetch(API_ENDPOINTS.ORDERS, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

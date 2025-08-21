@@ -14,7 +14,10 @@ export const getCart = async () => {
 
 export const addToCart = async (productId, quantity = 1) => {
   try {
-    const response = await api.post(API_ENDPOINTS.CART_ADD, { productId, quantity }, {
+    const response = await api.post(API_ENDPOINTS.CART_ADD, { 
+      productId, // Make sure this matches your backend schema
+      quantity 
+    }, {
       timeout: 8000,
     });
     return response.data;
@@ -23,9 +26,10 @@ export const addToCart = async (productId, quantity = 1) => {
   }
 };
 
-export const removeFromCart = async (productId) => {
+// Fix this function - your backend expects item_id as query parameter
+export const removeFromCart = async (itemId) => {
   try {
-    const response = await api.post(API_ENDPOINTS.CART_REMOVE, { productId }, {
+    const response = await api.delete(`${API_ENDPOINTS.CART_REMOVE}?item_id=${itemId}`, {
       timeout: 8000,
     });
     return response.data;
@@ -34,9 +38,13 @@ export const removeFromCart = async (productId) => {
   }
 };
 
-export const updateCartItem = async (productId, quantity) => {
+// Fix this function - your backend expects itemId and quantity in body
+export const updateCartItem = async (itemId, quantity) => {
   try {
-    const response = await api.post(API_ENDPOINTS.CART_UPDATE, { productId, quantity }, {
+    const response = await api.put(API_ENDPOINTS.CART_UPDATE, { 
+      itemId, // Make sure this matches your backend schema
+      quantity 
+    }, {
       timeout: 8000,
     });
     return response.data;

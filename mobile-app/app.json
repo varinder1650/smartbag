@@ -15,7 +15,7 @@
     ],
     "extra": {
       // "EXPO_PUBLIC_API_URL": "https://smartbag.onrender.com/api/",
-      "EXPO_PUBLIC_API_URL": "http://10.0.0.74:3001/api/",
+      // "EXPO_PUBLIC_API_URL": "http://10.0.0.74:8000/api/",
       "EXPO_PUBLIC_OLA_KRUTRIM_API_KEY": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ",
       "eas": {
         "projectId": "your-project-id-here"

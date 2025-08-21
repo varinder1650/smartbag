@@ -30,7 +30,7 @@ export default function TabLayout() {
     );
   }
 
-  const isPartner = user.role === 'partner';
+  const isPartner = user.role === 'delivery_partner';
 
   return (
     <AuthWrapper>

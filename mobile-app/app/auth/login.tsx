@@ -21,16 +21,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 
-  // Test if useAuth is working
-  console.log('Login function exists:', typeof login);
-  console.log('useAuth hook loaded successfully');
-
   const handleLogin = async () => {
-    console.log('Login button pressed!');
-    console.log('Email/Phone:', emailOrPhone);
-    console.log('Password:', password);
-    console.log('Login function type:', typeof login);
-    
     if (!emailOrPhone || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -38,20 +29,14 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      console.log('Starting login process...');
-      
       const result = await login(emailOrPhone, password);
-      console.log('Login result:', result);
       
       if (result.success) {
-        console.log('Login successful, navigating to home...');
         router.replace('/(tabs)');
       } else {
-        console.log('Login failed:', result.error);
         Alert.alert('Login Failed', result.error || 'Network error. Please check your connection and try again.');
       }
     } catch (error) {
-      console.error('Login error:', error);
       Alert.alert('Error', 'Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -126,8 +111,6 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Test Credentials */}
-          {/* Removed test credentials box as requested */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

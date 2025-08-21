@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
@@ -21,35 +21,36 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
+interface ProductImage {
+  url?: string;
+  secure_url?: string;
+  thumbnail?: string;
+  public_id?: string;
+}
+
 interface Product {
   _id: string;
   name: string;
   description: string;
   price: number;
-  images: string[];
+  images: (string | ProductImage)[];
   category: { name: string; _id: string };
   brand: { name: string };
+  stock: number;
+  status: string;
 }
 
 interface Category {
   _id: string;
   name: string;
   icon?: string;
+  image?: string;
+  status: string;
 }
-
-interface SectionData {
-  type: 'header' | 'categories' | 'products';
-  data: any[];
-  title?: string;
-}
-
-// IMAGE_BASE_URL is now imported from apiConfig
 
 const HomeScreen = () => {
-  console.log('HomeScreen - Component mounted');
-  // Use AuthContext directly
   const { user, token, loading: authLoading } = useAuth();
-  console.log('HomeScreen - Auth state:', { user: !!user, token: !!token, authLoading });
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -60,37 +61,142 @@ const HomeScreen = () => {
   const [cartCount, setCartCount] = useState(0);
   const [showCartNotification, setShowCartNotification] = useState(false);
   const [userAddress, setUserAddress] = useState<string>('Add Address');
+  
+  // ✅ Add refs to prevent infinite loops
+  const initialDataFetched = useRef(false);
+  const lastFetchTime = useRef(0);
+  const isFetching = useRef(false);
 
-  useEffect(() => {
-    // Initial data fetch
-    fetchData(searchQuery, selectedCategory);
-    fetchCartCount();
-    if (!authLoading) {
-      fetchUserAddress();
+  // ✅ Memoized fetch functions to prevent recreation on every render
+  const fetchData = useCallback(async () => {
+    // ✅ Prevent multiple simultaneous fetches
+    if (isFetching.current) {
+      console.log('Fetch already in progress, skipping...');
+      return;
     }
-  }, [authLoading]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchCartCount();
-      fetchUserAddress();
-    }, [token])
-  );
-
-  useEffect(() => {
-    // Debounced fetch when search or category changes
-    const handler = setTimeout(() => {
-      if (searchQuery.length === 0 || searchQuery.length > 2) {
-        fetchData(searchQuery, selectedCategory);
+    
+    // ✅ Prevent too frequent fetches (minimum 2 seconds between fetches)
+    const now = Date.now();
+    if (now - lastFetchTime.current < 2000) {
+      console.log('Too soon since last fetch, skipping...');
+      return;
+    }
+    
+    try {
+      isFetching.current = true;
+      lastFetchTime.current = now;
+      setLoading(true);
+      
+      console.log('Fetching initial data...');
+      const timestamp = Date.now();
+      
+      const [productsRes, categoriesRes] = await Promise.all([
+        fetch(`${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`),
+        fetch(`${API_ENDPOINTS.CATEGORIES}?_t=${timestamp}`),
+      ]);
+      
+      if (!productsRes.ok || !categoriesRes.ok) {
+        throw new Error(`HTTP Error - Products: ${productsRes.status}, Categories: ${categoriesRes.status}`);
       }
-    }, 500); // 500ms debounce
+      
+      const productsData = await productsRes.json();
+      const categoriesData = await categoriesRes.json();
+      
+      // Extract products from response
+      let productsArray: Product[] = [];
+      if (productsData.products && Array.isArray(productsData.products)) {
+        productsArray = productsData.products;
+      } else if (Array.isArray(productsData)) {
+        productsArray = productsData;
+      }
+      
+      // Extract categories from response
+      let categoriesArray: Category[] = [];
+      if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
+        categoriesArray = categoriesData.categories;
+      } else if (Array.isArray(categoriesData)) {
+        categoriesArray = categoriesData;
+      }
+      
+      // Filter only active items
+      const activeProducts = productsArray.filter(product => 
+        product.status === 'active' || product.status === undefined
+      );
+      const activeCategories = categoriesArray.filter(category => 
+        category.status === 'active' || category.status === undefined
+      );
+      
+      console.log('Data fetched successfully:', {
+        products: activeProducts.length,
+        categories: activeCategories.length
+      });
+      
+      setProducts(activeProducts);
+      setFilteredProducts(activeProducts);
+      setCategories(activeCategories);
+      initialDataFetched.current = true;
+      
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      Alert.alert('Error', `Failed to load data: ${error.message}`);
+    } finally {
+      setLoading(false);
+      isFetching.current = false;
+    }
+  }, []); // ✅ Empty dependency array
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [searchQuery, selectedCategory]);
+  const fetchFilteredProducts = useCallback(async (search: string = '', category: string | null = null) => {
+    // ✅ Don't fetch if already fetching
+    if (isFetching.current) {
+      return;
+    }
+    
+    try {
+      isFetching.current = true;
+      console.log('Fetching filtered products:', { search, category });
+      
+      const timestamp = Date.now();
+      let productsUrl = `${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`;
+      
+      if (search) {
+        productsUrl += `&search=${encodeURIComponent(search)}`;
+      }
+      if (category) {
+        productsUrl += `&category=${encodeURIComponent(category)}`;
+      }
 
-  const fetchCartCount = async () => {
+      const response = await fetch(productsUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+      
+      const productsData = await response.json();
+      
+      // Extract products from response
+      let productsArray: Product[] = [];
+      if (productsData.products && Array.isArray(productsData.products)) {
+        productsArray = productsData.products;
+      } else if (Array.isArray(productsData)) {
+        productsArray = productsData;
+      }
+      
+      // Filter only active items
+      const activeProducts = productsArray.filter(product => 
+        product.status === 'active' || product.status === undefined
+      );
+      
+      console.log('Filtered products fetched:', activeProducts.length);
+      setFilteredProducts(activeProducts);
+      
+    } catch (error) {
+      console.error('Error fetching filtered products:', error);
+    } finally {
+      isFetching.current = false;
+    }
+  }, []); // ✅ Empty dependency array
+
+  const fetchCartCount = useCallback(async () => {
     if (!token) {
       setCartCount(0);
       return;
@@ -113,24 +219,24 @@ const HomeScreen = () => {
       console.error('Error fetching cart count:', error);
       setCartCount(0);
     }
-  };
+  }, [token]); // ✅ Only depend on token
 
-  const fetchUserAddress = async () => {
+  const fetchUserAddress = useCallback(async () => {
     if (!token) {
       setUserAddress('Add Address');
       return;
     }
     
     try {
-      const response = await fetch(API_ENDPOINTS.USER_ADDRESS, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
       
       if (response.ok) {
-        const addressData = await response.json();
-        setUserAddress(addressData.address || 'Add Address');
+        const userData = await response.json();
+        setUserAddress(userData.address || 'Add Address');
       } else {
         setUserAddress('Add Address');
       }
@@ -138,90 +244,120 @@ const HomeScreen = () => {
       console.error('Error fetching user address:', error);
       setUserAddress('Add Address');
     }
-  };
+  }, [token]); // ✅ Only depend on token
 
-  // This function is no longer needed as filtering is done on the backend.
-  // We can remove it or leave it empty.
-  const filterProducts = () => {};
-
-  const fetchData = async (search: string = '', category: string | null = null) => {
-    try {
-      setLoading(true);
-      console.log(`fetchData - starting... search: ${search}, category: ${category}`);
-      const timestamp = Date.now();
-      let productsUrl = `${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`;
-      if (search) {
-        productsUrl += `&search=${encodeURIComponent(search)}`;
-      }
-      if (category) {
-        productsUrl += `&category=${encodeURIComponent(category)}`;
-      }
-
-      const [productsRes, categoriesRes] = await Promise.all([
-        fetch(productsUrl),
-        fetch(`${API_ENDPOINTS.CATEGORIES}?_t=${timestamp}`),
-      ]);
-      
-      if (!productsRes.ok || !categoriesRes.ok) {
-        throw new Error('Failed to fetch data');
-      }
-      
-      const productsData = await productsRes.json();
-      const categoriesData = await categoriesRes.json();
-      
-      console.log('fetchData - productsData:', productsData);
-      console.log('fetchData - categoriesData:', categoriesData);
-      
-      // Extract products from the nested structure
-      const productsArray = productsData.products || productsData;
-      const categoriesArray = categoriesData.categories || categoriesData;
-      
-      // Ensure we always set arrays
-      const safeProducts = Array.isArray(productsArray) ? productsArray : [];
-      const safeCategories = Array.isArray(categoriesArray) ? categoriesArray : [];
-      
-      // If searching, we replace products, otherwise we might merge them
-      // For now, a simple replacement is fine.
-      setProducts(safeProducts);
-      setFilteredProducts(safeProducts);
-      
-      // Only update categories if they haven't been loaded yet
-      if (categories.length === 0) {
-        setCategories(safeCategories);
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      Alert.alert('Error', 'Failed to load data. Please check your connection.');
-    } finally {
-      setLoading(false);
+  // ✅ Initial data fetch - only once
+  useEffect(() => {
+    if (!initialDataFetched.current && !isFetching.current) {
+      console.log('Initial data fetch triggered');
+      fetchData();
     }
+  }, []); // ✅ Empty dependency array - only run once
+
+  // ✅ Auth-related fetches - only when auth state changes
+  useEffect(() => {
+    if (!authLoading) {
+      console.log('Auth state changed, fetching user data');
+      fetchCartCount();
+      fetchUserAddress();
+    }
+  }, [authLoading, fetchCartCount, fetchUserAddress]); // ✅ Stable dependencies
+
+  // ✅ Focus effect for cart count only
+  useFocusEffect(
+    useCallback(() => {
+      if (token && !authLoading) {
+        fetchCartCount();
+      }
+    }, [token, authLoading, fetchCartCount])
+  );
+
+  // ✅ Search/filter effect with proper debouncing
+  useEffect(() => {
+    if (!initialDataFetched.current) {
+      return; // Don't filter until initial data is loaded
+    }
+    
+    const handler = setTimeout(() => {
+      if (searchQuery.length === 0 || searchQuery.length > 2) {
+        console.log('Search/filter triggered:', { searchQuery, selectedCategory });
+        fetchFilteredProducts(searchQuery, selectedCategory);
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery, selectedCategory, fetchFilteredProducts]); // ✅ Stable dependencies
+
+  // ✅ Helper function to extract product ID
+  const extractProductIdFromImages = (product: Product): string | null => {
+    if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+      const firstImage = product.images[0];
+      
+      if (typeof firstImage === 'object' && firstImage.public_id) {
+        // Extract ID from public_id like "products/product_689f423f42968e9301554db2_image_0"
+        const match = firstImage.public_id.match(/product_([a-f0-9]{24})_/);
+        if (match) {
+          console.log('Extracted product ID from image:', match[1]);
+          return match[1];
+        }
+      }
+    }
+    
+    return null;
   };
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    initialDataFetched.current = false; // Reset flag to allow fresh fetch
     await fetchData();
     await fetchCartCount();
     await fetchUserAddress();
     setRefreshing(false);
-  };
+  }, [fetchData, fetchCartCount, fetchUserAddress]);
 
-  const retryConnection = () => {
+  const retryConnection = useCallback(() => {
+    initialDataFetched.current = false; // Reset flag
     fetchData();
-  };
+  }, [fetchData]);
 
-  const handleProductPress = (productId: string) => {
+  const handleProductPress = (product: Product) => {
+    console.log('=== PRODUCT PRESS DEBUG ===');
+    console.log('Product clicked:', product.name);
+    console.log('Product._id:', product._id);
+    console.log('Product.id:', (product as any).id);
+    
+    // Try to get product ID from various sources
+    let productId = product._id || (product as any).id;
+    
+    // If still no ID, try to extract from image public_id
+    if (!productId || productId === 'undefined') {
+      productId = extractProductIdFromImages(product);
+      console.log('Extracted ID from images:', productId);
+    }
+    
+    console.log('Final product ID for navigation:', productId);
+    console.log('=== END PRODUCT PRESS DEBUG ===');
+    
+    if (!productId || productId === 'undefined') {
+      Alert.alert('Error', 'Product ID not found');
+      return;
+    }
+    
     router.push(`/product/${productId}`);
   };
 
-  const handleCategoryPress = (categoryId: string | null) => {
+  const handleCategoryPress = useCallback((categoryId: string | null) => {
+    console.log('Category pressed:', categoryId);
     setSelectedCategory(categoryId);
-  };
+  }, []);
 
-  const handleViewAllPress = (categoryId: string) => {
+  const handleViewAllPress = useCallback((categoryId: string) => {
     setSelectedCategory(categoryId);
-  };
+  }, []);
 
-  const handleCartPress = () => {
+  const handleCartPress = useCallback(() => {
     if (authLoading) {
       Alert.alert('Please wait', 'Checking login status...');
       return;
@@ -238,64 +374,46 @@ const HomeScreen = () => {
       return;
     }
     router.push('/(tabs)/explore');
-  };
+  }, [authLoading, token]);
 
-  const handleHomeButtonPress = () => {
-    setSelectedCategory(null);
-    setSearchQuery('');
-  };
-
-  const addToCart = async (productId: string) => {
-    if (!token) {
-      Alert.alert(
-        'Login Required', 
-        'Please login to add items to your cart', 
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Login', onPress: () => router.push('/auth/login') }
-        ]
-      );
-      return;
+  // Enhanced function to get image URL from various formats
+  const getImageUrl = useCallback((images: (string | ProductImage)[]): string => {
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return 'https://via.placeholder.com/150?text=No+Image';
     }
-
-    try {
-      const response = await fetch(API_ENDPOINTS.CART_ADD, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          productId: productId,
-          quantity: 1,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setShowCartNotification(true);
-        setTimeout(() => setShowCartNotification(false), 2000);
-        fetchCartCount();
-      } else {
-        Alert.alert('Error', data.message || 'Failed to add to cart');
+    
+    const firstImage = images[0];
+    
+    if (typeof firstImage === 'string') {
+      return firstImage.startsWith('http') ? firstImage : `${IMAGE_BASE_URL}${firstImage}`;
+    }
+    
+    if (typeof firstImage === 'object' && firstImage !== null) {
+      const url = firstImage.url || firstImage.secure_url || firstImage.thumbnail;
+      if (url) {
+        return url;
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add to cart');
     }
-  };
+    
+    return 'https://via.placeholder.com/150?text=No+Image';
+  }, []);
 
-  const getCategoryIconUrl = (category: Category) => {
-    if (category.icon) {
-      if (category.icon.startsWith('http')) {
-        return category.icon;
-      }
-      return `${IMAGE_BASE_URL}${category.icon}?_t=${Date.now()}`;
+  // Enhanced function to get category icon URL
+  const getCategoryIconUrl = useCallback((category: Category): string => {
+    const iconSource = category.icon || category.image;
+    
+    if (!iconSource) {
+      return 'https://via.placeholder.com/48?text=' + encodeURIComponent(category.name.charAt(0));
     }
-    return null;
-  };
+    
+    if (iconSource.startsWith('http')) {
+      return iconSource;
+    }
+    
+    return `${IMAGE_BASE_URL}${iconSource}`;
+  }, []);
 
-  const renderTopBar = () => (
+  const renderTopBar = useCallback(() => (
     <View style={styles.topBar}>
       <TouchableOpacity style={styles.locationContainer} onPress={() => router.push('/address')}>
         <Ionicons name="location-outline" size={20} color="#333" />
@@ -313,9 +431,9 @@ const HomeScreen = () => {
         </TouchableOpacity>
       </View>
     </View>
-  );
+  ), [userAddress, cartCount, handleCartPress]);
 
-  const renderSearchBar = () => (
+  const renderSearchBar = useCallback(() => (
     <View style={styles.searchBarContainer}>
       <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
       <TextInput
@@ -330,133 +448,108 @@ const HomeScreen = () => {
         clearButtonMode="while-editing"
       />
     </View>
-  );
+  ), [searchQuery]);
 
-  // --- Category Filter Row ---
-  const renderCategoryFilterRow = () => (
+  const renderCategoryFilterRow = useCallback(() => (
     <View style={styles.categoryFilterRow}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }}>
-        {/* All filter */}
-        <TouchableOpacity onPress={() => handleCategoryPress(null)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
-          <View style={styles.categoryIconContainer}>
-            <Ionicons name="search" size={24} color={selectedCategory === null ? '#007AFF' : '#888'} />
+        <TouchableOpacity 
+          key="category-all"
+          onPress={() => handleCategoryPress(null)} 
+          style={{ alignItems: 'center', marginHorizontal: 8 }}
+        >
+          <View style={[styles.categoryIconContainer, selectedCategory === null && styles.categoryUberSelected]}>
+            <Ionicons name="grid" size={24} color={selectedCategory === null ? '#fff' : '#007AFF'} />
           </View>
-          <Text style={{ fontSize: 14, color: selectedCategory === null ? '#111' : '#888', fontWeight: selectedCategory === null ? 'bold' : 'normal' }}>All</Text>
+          <Text style={[styles.categoryUberLabel, selectedCategory === null && styles.categoryUberLabelSelected]}>All</Text>
         </TouchableOpacity>
+        
         {categories.map((cat, index) => {
           const iconUrl = getCategoryIconUrl(cat);
-          const categoryKey = cat._id || cat.name || `category-${index}`;
+          const categoryKey = cat._id || `category-${cat.name}-${index}`;
+          const isSelected = selectedCategory === cat._id;
+          
           return (
-            <TouchableOpacity key={categoryKey} onPress={() => handleCategoryPress(cat._id)} style={{ alignItems: 'center', marginHorizontal: 8 }}>
-              <View style={styles.categoryIconContainer}>
-                {iconUrl ? (
-                  <Image
-                    source={{ uri: iconUrl }}
-                    style={styles.categoryIcon}
-                    resizeMode="contain"
-                    onError={() => {
-                      console.log('Category icon failed to load for:', cat.name);
-                    }}
-
-                  />
-                ) : (
-                  <Ionicons 
-                    name="restaurant-outline" 
-                    size={24} 
-                    color={selectedCategory === cat._id ? '#007AFF' : '#888'} 
-                  />
-                )}
+            <TouchableOpacity 
+              key={categoryKey}
+              onPress={() => handleCategoryPress(cat._id)} 
+              style={{ alignItems: 'center', marginHorizontal: 8 }}
+            >
+              <View style={[styles.categoryIconContainer, isSelected && styles.categoryUberSelected]}>
+                <Image
+                  source={{ uri: iconUrl }}
+                  style={styles.categoryIcon}
+                  resizeMode="contain"
+                  onError={() => {
+                    console.log('Category icon failed to load for:', cat.name);
+                  }}
+                />
               </View>
-              <Text style={{ fontSize: 14, color: selectedCategory === cat._id ? '#111' : '#888', fontWeight: selectedCategory === cat._id ? 'bold' : 'normal' }}>{cat.name}</Text>
+              <Text style={[styles.categoryUberLabel, isSelected && styles.categoryUberLabelSelected]}>{cat.name}</Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
     </View>
-  );
+  ), [categories, selectedCategory, getCategoryIconUrl, handleCategoryPress]);
 
-  // --- Featured and Suggestions (mock for now) ---
-  const safeFilteredProducts = Array.isArray(filteredProducts) ? filteredProducts : [];
-  console.log('HomeScreen - filteredProducts:', filteredProducts);
-  console.log('HomeScreen - safeFilteredProducts:', safeFilteredProducts);
-  
-  const featuredProducts = safeFilteredProducts.slice(0, 5);
-  const suggestedProducts = safeFilteredProducts.slice(5, 10);
-
-  const renderProductTile = ({ item }: { item: Product }) => {
-    const imageUrl = item.images && item.images.length > 0
-      ? item.images[0].startsWith('http')
-        ? item.images[0]
-        : `${API_BASE_URL.replace('/api', '')}${item.images[0]}?_t=${Date.now()}`
-      : 'https://via.placeholder.com/150';
-    
-    console.log(`Rendering product ${item.name} with image: ${imageUrl}`);
+  const renderProductTile = useCallback(({ item, index }: { item: Product; index: number }) => {
+    const imageUrl = getImageUrl(item.images);
     
     return (
-      <TouchableOpacity style={styles.productTile} onPress={() => handleProductPress(item._id)}>
+      <TouchableOpacity 
+        style={styles.productTile} 
+        onPress={() => handleProductPress(item)}
+      >
         <Image
           source={{ uri: imageUrl }}
           style={styles.productTileImage}
           resizeMode="cover"
-          onError={(error) => {
-            console.log('Image failed to load for product:', item.name, 'Image:', imageUrl, 'Error:', error);
+          onError={() => {
+            console.log('Product image failed to load for:', item.name);
           }}
-          onLoad={() => {
-            console.log('Image loaded successfully for product:', item.name, 'Image:', imageUrl);
-          }}
-          defaultSource={{ uri: 'https://via.placeholder.com/150' }}
         />
         <View style={styles.productTileContent}>
           <Text style={styles.productTileName} numberOfLines={2}>{item.name}</Text>
-          <Text style={styles.productTileBrand} numberOfLines={1}>{item.brand?.name}</Text>
+          <Text style={styles.productTileBrand} numberOfLines={1}>{item.brand?.name || 'No Brand'}</Text>
           <Text style={styles.productTilePrice}>₹{item.price}</Text>
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [getImageUrl, handleProductPress]);
 
-  const renderProductCard = ({ item }: { item: Product }) => {
-    const imageUrl = item.images && item.images.length > 0
-      ? item.images[0].startsWith('http')
-        ? item.images[0]
-        : `${API_BASE_URL.replace('/api', '')}${item.images[0]}?_t=${Date.now()}`
-      : 'https://via.placeholder.com/150';
+  const renderProductCard = useCallback(({ item, index }: { item: Product; index: number }) => {
+    const imageUrl = getImageUrl(item.images);
     
     return (
-      <TouchableOpacity style={styles.productCard} onPress={() => handleProductPress(item._id)}>
+      <TouchableOpacity 
+        style={styles.productCard} 
+        onPress={() => handleProductPress(item)}
+      >
         <Image
           source={{ uri: imageUrl }}
           style={styles.productCardImage}
           resizeMode="cover"
-          onError={(error) => {
-            console.log('Image failed to load for product:', item.name, 'Image:', imageUrl, 'Error:', error);
+          onError={() => {
+            console.log('Product card image failed to load for:', item.name);
           }}
-          onLoad={() => {
-            console.log('Image loaded successfully for product:', item.name, 'Image:', imageUrl);
-          }}
-          defaultSource={{ uri: 'https://via.placeholder.com/150' }}
         />
         <View style={styles.productCardContent}>
           <Text style={styles.productCardName} numberOfLines={2}>{item.name}</Text>
-          <Text style={styles.productCardBrand} numberOfLines={1}>{item.brand?.name}</Text>
+          <Text style={styles.productCardBrand} numberOfLines={1}>{item.brand?.name || 'No Brand'}</Text>
           <Text style={styles.productCardPrice}>₹{item.price}</Text>
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [getImageUrl, handleProductPress]);
 
-  const renderCategorySection = (category: Category) => {
-    // Match by name since categories API returns _id: null
-    const categoryProducts = products.filter(product =>
-      product.category?.name === category.name ||
-      product.category?._id === category._id
-    );
+  const renderCategorySection = useCallback(({ item: category, index }: { item: Category; index: number }) => {
+    const categoryProducts = products.filter(product => product.category?._id === category._id);
 
-    console.log(`Category "${category.name}" has ${categoryProducts.length} products`);
     if (categoryProducts.length === 0) return null;
     
     return (
-      <View key={category._id || category.name || `category-section-${Math.random()}`} style={styles.categorySection}>
+      <View style={styles.categorySection}>
         <View style={styles.categorySectionHeader}>
           <Text style={styles.categorySectionTitle}>
             {category.name}
@@ -468,51 +561,29 @@ const HomeScreen = () => {
         <FlatList
           data={categoryProducts}
           renderItem={renderProductCard}
-          keyExtractor={item => item._id}
+          keyExtractor={(item, idx) => `category-${category._id}-product-${item._id || idx}-${idx}`}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryProductList}
           nestedScrollEnabled={true}
+          removeClippedSubviews={false}
+          initialNumToRender={3}
+          maxToRenderPerBatch={5}
+          getItemLayout={(data, index) => ({
+            length: 150,
+            offset: 150 * index,
+            index,
+          })}
         />
       </View>
     );
-  };
+  }, [products, renderProductCard, handleViewAllPress]);
 
-  // Create data for the main FlatList
-  const getMainListData = () => {
-    if (selectedCategory) {
-      const selectedCat = categories.find(cat => cat._id === selectedCategory);
-      return selectedCat ? [selectedCat] : [];
-    }
-    return categories;
-  };
-
-  const renderMainListItem = ({ item }: { item: Category }) => {
-    // In search mode, we render products directly, not by category
-    if (searchQuery.trim() || selectedCategory) {
-      return null; // Products are rendered in a separate FlatList
-    }
-    return renderCategorySection(item);
-  };
-
-  // Memoize renderHeader to prevent remounting
-  const renderHeader = useCallback(() => (
-    <>
-      {renderTopBar()}
-      {renderSearchBar()}
-    </>
-  ), [userAddress, cartCount, searchQuery]);
-
-  const renderFooter = () => (
-    <View style={{ height: 100 }} />
-  );
-
-  // --- Main Render ---
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>Loading products and categories...</Text>
           <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -521,18 +592,27 @@ const HomeScreen = () => {
     );
   }
 
+  // Determine which view mode we're in
+  const isGridMode = searchQuery.trim() || selectedCategory;
+
   return (
     <SafeAreaView style={styles.container}>
       {renderTopBar()}
       {renderSearchBar()}
-      {searchQuery.trim() || selectedCategory ? (
+      {renderCategoryFilterRow()}
+      
+      {isGridMode ? (
         <FlatList
-          key="search-results"
+          key="products-grid-view"
           data={filteredProducts}
           renderItem={renderProductTile}
-          keyExtractor={(item) => item._id}
-          numColumns={2} // Display in a grid
-          ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32, color: '#888' }}>No products found.</Text>}
+          keyExtractor={(item, index) => `grid-product-${item._id || extractProductIdFromImages(item) || index}-${index}`}
+          numColumns={2}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', marginTop: 32 }}>
+              <Text style={{ color: '#888', fontSize: 16 }}>No products found.</Text>
+            </View>
+          }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 16, paddingBottom: 32 }}
           refreshControl={
@@ -543,15 +623,31 @@ const HomeScreen = () => {
               tintColor="#007AFF"
             />
           }
+          removeClippedSubviews={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          windowSize={10}
+          getItemLayout={(data, index) => ({
+            length: 200, // Approximate height of product tile
+            offset: 200 * Math.floor(index / 2), // Account for 2 columns
+            index,
+          })}
         />
       ) : (
         <FlatList
-          key="category-browse"
-          data={getMainListData()}
-          renderItem={renderMainListItem}
-          keyExtractor={(item) => item._id || item.name || `category-${Math.random()}`}
-          ListHeaderComponent={renderCategoryFilterRow}
-          ListFooterComponent={renderFooter}
+          key="categories-browse-view"
+          data={categories}
+          renderItem={renderCategorySection}
+          keyExtractor={(item, index) => `category-section-${item._id}-${index}`}
+          ListFooterComponent={() => <View style={{ height: 100 }} />}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', marginTop: 32 }}>
+              <Text style={{ color: '#888', fontSize: 16 }}>No categories found.</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
+                <Text style={styles.retryButtonText}>Retry Loading</Text>
+              </TouchableOpacity>
+            </View>
+          }
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -562,8 +658,13 @@ const HomeScreen = () => {
             />
           }
           contentContainerStyle={{ paddingTop: 16 }}
+          removeClippedSubviews={false}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={8}
         />
       )}
+      
       {showCartNotification && (
         <View style={styles.cartNotification}>
           <Ionicons name="checkmark-circle" size={20} color="#fff" />
@@ -574,24 +675,22 @@ const HomeScreen = () => {
   );
 };
 
+// ... keep all your existing styles ...
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff', // Set whole app background to white
+    backgroundColor: '#fff',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#fff',
-    borderRadius: 0,
-    marginHorizontal: 0,
     marginTop: 12,
     marginBottom: 4,
     paddingHorizontal: 16,
     height: 48,
-    shadowColor: 'transparent',
-    borderWidth: 0,
   },
   locationContainer: {
     flexDirection: 'row',
@@ -633,13 +732,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   loadingText: {
     fontSize: 16,
     color: '#666',
+    marginBottom: 16,
   },
   retryButton: {
-    marginTop: 16,
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: '#007AFF',
@@ -650,85 +750,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  searchContainer: {
+  searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8f9fa',
     borderRadius: 8,
+    marginHorizontal: 16,
+    marginVertical: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  searchInputUber: {
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
     flex: 1,
-    marginLeft: 8,
     fontSize: 16,
+    color: '#222',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingVertical: 0,
   },
-  categoryUberRow: {
-    padding: 16,
-  },
-  categoryUber: {
-    alignItems: 'center',
-    marginRight: 16,
+  categoryFilterRow: {
     backgroundColor: '#fff',
-    padding: 12,
-    paddingBottom: 20,
-    borderRadius: 12,
-    width: 100,
-    height: 90,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  categoryUberLabel: {
-    fontSize: 12,
-    color: '#333',
-    textAlign: 'center',
-  },
-  filterRow: {
-    padding: 16,
-  },
-  filterBtn: {
-    alignItems: 'center',
-    marginRight: 16,
-    padding: 8,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-  },
-  filterBtnText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
-  },
-  sectionUberTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  cartNotification: {
-    position: 'absolute',
-    top: 100,
-    left: 20,
-    right: 20,
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  cartNotificationText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    marginBottom: 8,
   },
   categoryIconContainer: {
     width: 48,
@@ -740,15 +786,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   categoryIcon: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
+    width: '80%',
+    height: '80%',
+    borderRadius: 20,
   },
   categoryUberSelected: {
     backgroundColor: '#007AFF',
   },
+  categoryUberLabel: {
+    fontSize: 12,
+    color: '#333',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
   categoryUberLabelSelected: {
-    color: '#fff',
+    color: '#007AFF',
+    fontWeight: 'bold',
   },
   productTile: {
     flex: 1,
@@ -768,6 +821,7 @@ const styles = StyleSheet.create({
     height: 160,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    backgroundColor: '#f5f5f5',
   },
   productTileContent: {
     padding: 12,
@@ -806,6 +860,7 @@ const styles = StyleSheet.create({
     height: 120,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    backgroundColor: '#f5f5f5',
   },
   productCardContent: {
     padding: 12,
@@ -829,6 +884,7 @@ const styles = StyleSheet.create({
   },
   categorySection: {
     marginBottom: 20,
+    paddingHorizontal: 16,
   },
   categorySectionHeader: {
     flexDirection: 'row',
@@ -849,51 +905,29 @@ const styles = StyleSheet.create({
   categoryProductList: {
     paddingHorizontal: 8,
   },
-  loginButton: {
-    marginRight: 16,
+  cartNotification: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: '#4CAF50',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#007AFF',
+    paddingVertical: 12,
     borderRadius: 8,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
-    marginBottom: 4,
-    paddingHorizontal: 16,
-    height: 48,
-    shadowColor: 'transparent',
-    borderWidth: 0,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
+  cartNotificationText: {
+    color: '#fff',
     fontSize: 16,
-    color: '#222',
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingVertical: 0,
-  },
-  categoryFilterRow: {
-    backgroundColor: '#fff',
-    borderRadius: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
-    marginBottom: 12,
-    paddingVertical: 4,
-    shadowColor: 'transparent',
-    borderWidth: 0,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
 

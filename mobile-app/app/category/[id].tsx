@@ -52,6 +52,7 @@ export default function CategoryProductsScreen() {
       const [productsRes, categoriesRes] = await Promise.all([
         fetch(`${API_ENDPOINTS.PRODUCTS}?_t=${timestamp}`),
         fetch(`${API_ENDPOINTS.CATEGORIES}?_t=${timestamp}`),
+        // console.log(`${API_ENDPOINTS.PRODUCTS}`,`${API_ENDPOINTS.CATEGORIES}`)
       ]);
       
       if (!productsRes.ok || !categoriesRes.ok) {

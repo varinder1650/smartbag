@@ -14,10 +14,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
-
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+
+interface ProductImage {
+  url?: string;
+  secure_url?: string;
+  thumbnail?: string;
+  public_id?: string;
+}
 
 interface CartItem {
   _id: string;
@@ -25,7 +31,7 @@ interface CartItem {
     _id: string;
     name: string;
     price: number;
-    images: string[];
+    images: (string | ProductImage)[];
     brand: { name: string };
   };
   quantity: number;
@@ -47,38 +53,81 @@ const CartScreen = () => {
     }, [])
   );
 
+  // ✅ Enhanced function to get image URL from various formats
+  const getImageUrl = (images: (string | ProductImage)[]): string => {
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return 'https://via.placeholder.com/150?text=No+Image';
+    }
+    
+    const firstImage = images[0];
+    
+    // If it's already a string URL
+    if (typeof firstImage === 'string') {
+      return firstImage.startsWith('http') ? firstImage : `${IMAGE_BASE_URL}${firstImage}`;
+    }
+    
+    // If it's an image object from Cloudinary
+    if (typeof firstImage === 'object' && firstImage !== null) {
+      const url = firstImage.url || firstImage.secure_url || firstImage.thumbnail;
+      if (url) {
+        return url;
+      }
+    }
+    
+    return 'https://via.placeholder.com/150?text=No+Image';
+  };
+
   const fetchCart = async () => {
     try {
-      console.log('=== FETCH CART DEBUG ===');
-      console.log('Token being sent:', token);
+      console.log('Fetching cart with token:', token ? 'Present' : 'Missing');
+      
       if (!token) {
-        // Use public cart endpoint for non-authenticated users
-        const timestamp = Date.now();
-        const response = await fetch(`${API_ENDPOINTS.CART}/public?_t=${timestamp}`);
-        const data = await response.json();
-        console.log('Public cart response:', data);
-        setCartItems(data.items || []);
+        setCartItems([]);
         setLoading(false);
         return;
       }
-      // Print first 20 chars of token for debugging
-      console.log('Token (first 20 chars):', token ? token.substring(0, 20) : 'null');
+
       const timestamp = Date.now();
       const response = await fetch(`${API_ENDPOINTS.CART}?_t=${timestamp}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
-      const data = await response.json();
-      console.log('Cart fetch response:', data);
-      if (response.ok) {
-        setCartItems(data.items || []);
-      } else {
-        console.error('Failed to fetch cart. Status:', response.status, 'Token:', token);
+
+      console.log('Cart response status:', response.status);
+      
+      if (response.status === 401) {
+        console.log('Cart: Authentication failed, token may be expired');
+        // Handle expired token - redirect to login or refresh token
+        Alert.alert(
+          'Session Expired',
+          'Please login again to access your cart',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Login', onPress: () => router.push('/auth/login') }
+          ]
+        );
+        setCartItems([]);
+        setLoading(false);
+        return;
       }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Cart data received:', data);
+      
+      // Ensure items is always an array
+      const items = data.items || [];
+      setCartItems(items);
+
     } catch (error) {
       console.error('Error fetching cart:', error);
       Alert.alert('Error', 'Failed to load cart');
+      setCartItems([]);
     } finally {
       setLoading(false);
     }
@@ -94,15 +143,19 @@ const CartScreen = () => {
     try {
       if (newQuantity <= 0) {
         // Remove item
-        const response = await fetch(API_ENDPOINTS.CART_REMOVE, {
+        const response = await fetch(`${API_ENDPOINTS.CART_REMOVE}?item_id=${itemId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
           },
         });
 
         if (response.ok) {
           setCartItems(prev => prev.filter(item => item._id !== itemId));
+        } else {
+          const errorData = await response.json();
+          Alert.alert('Error', errorData.message || 'Failed to remove item');
         }
       } else {
         // Update quantity
@@ -121,6 +174,9 @@ const CartScreen = () => {
               item._id === itemId ? { ...item, quantity: newQuantity } : item
             )
           );
+        } else {
+          const errorData = await response.json();
+          Alert.alert('Error', errorData.message || 'Failed to update quantity');
         }
       }
     } catch (error) {
@@ -149,31 +205,45 @@ const CartScreen = () => {
   };
 
   const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      Alert.alert('Error', 'Your cart is empty');
+      return;
+    }
     // Navigate to checkout page
     router.push('/checkout');
   };
 
   const placeOrder = async () => {
+    if (!token) {
+      Alert.alert('Error', 'Please login to place order');
+      return;
+    }
+
     try {
+      const orderData = {
+        items: cartItems.map(item => ({
+          product: item.product._id,
+          quantity: item.quantity,
+          price: item.product.price,
+        })),
+        total_amount: getTotalPrice(),
+        delivery_address: userAddress || 'Default Address',
+        payment_method: 'cod', // Default to Cash on Delivery
+      };
+
       const response = await fetch(API_ENDPOINTS.ORDERS, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          items: cartItems.map(item => ({
-            product: item.product._id,
-            quantity: item.quantity,
-            price: item.product.price,
-          })),
-          totalAmount: getTotalPrice(),
-        }),
+        body: JSON.stringify(orderData),
       });
 
       if (response.ok) {
         Alert.alert('Success', 'Order placed successfully!');
         setCartItems([]);
+        router.push('/orders'); // Navigate to orders page
       } else {
         const data = await response.json();
         Alert.alert('Error', data.message || 'Failed to place order');
@@ -184,37 +254,24 @@ const CartScreen = () => {
     }
   };
 
-  const renderCartItem = ({ item }: { item: CartItem }) => {
-    let imageUrl = '';
-    if (item.product.images && item.product.images.length > 0) {
-      if (typeof item.product.images[0] === 'string' && item.product.images[0].startsWith('http')) {
-        imageUrl = item.product.images[0];
-      } else if (typeof item.product.images[0] === 'string' && item.product.images[0].trim() !== '') {
-        imageUrl = `${API_BASE_URL.replace('/api', '')}${item.product.images[0]}?_t=${Date.now()}`;
-      }
-    }
-    if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '') {
-      imageUrl = 'https://via.placeholder.com/150';
-    }
+  const renderCartItem = ({ item, index }: { item: CartItem; index: number }) => {
+    const imageUrl = getImageUrl(item.product.images);
+
     return (
       <View style={styles.cartItem}>
         <Image
           source={{ uri: imageUrl }}
           style={styles.itemImage}
           resizeMode="cover"
-          onError={(error) => {
-            console.log('Cart item image failed to load for product:', item.product.name, 'Image:', imageUrl, 'Error:', error);
+          onError={() => {
+            console.log('Cart item image failed to load for:', item.product.name);
           }}
-          onLoad={() => {
-            console.log('Cart item image loaded successfully for product:', item.product.name, 'Image:', imageUrl);
-          }}
-          defaultSource={{ uri: 'https://via.placeholder.com/150' }}
         />
         <View style={styles.itemInfo}>
           <Text style={styles.itemName} numberOfLines={2}>
             {item.product.name}
           </Text>
-          <Text style={styles.itemBrand}>{item.product.brand?.name}</Text>
+          <Text style={styles.itemBrand}>{item.product.brand?.name || 'No Brand'}</Text>
           <Text style={styles.itemPrice}>₹{item.product.price}</Text>
           
           <View style={styles.quantityContainer}>
@@ -310,24 +367,28 @@ const CartScreen = () => {
           <FlatList
             data={cartItems}
             renderItem={renderCartItem}
-            keyExtractor={(item) => item._id}
+            keyExtractor={(item, index) => `cart-item-${item._id}-${index}`} // ✅ Fixed: More specific key
             style={styles.cartList}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl refreshing={updating} onRefresh={fetchCart} />
             }
+            // ✅ Add these props to prevent key conflicts
+            removeClippedSubviews={false}
+            maxToRenderPerBatch={10}
+            windowSize={10}
           />
           
           <View style={styles.footerWithPadding}>
             <View style={styles.totalContainer}>
               <Text style={styles.totalLabel}>Total:</Text>
-              <Text style={styles.totalPrice}>₹{getTotalPrice()}</Text>
+              <Text style={styles.totalPrice}>₹{getTotalPrice().toFixed(2)}</Text>
             </View>
             
             <TouchableOpacity 
               style={[styles.checkoutButton, updating && styles.disabledButton]}
               onPress={handleCheckout}
-              disabled={updating}
+              disabled={updating || cartItems.length === 0}
             >
               <Text style={styles.checkoutText}>
                 {updating ? 'Processing...' : 'Proceed to Checkout'}
@@ -423,6 +484,7 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 8,
     marginRight: 16,
+    backgroundColor: '#f5f5f5',
   },
   itemInfo: {
     flex: 1,
@@ -471,12 +533,6 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 8,
   },
-  footer: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
-  },
   totalContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -504,7 +560,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  footerWithPadding: { paddingBottom: 48, backgroundColor: '#fff' },
+  footerWithPadding: { 
+    paddingBottom: 48, 
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e9ecef',
+  },
 });
 
 export default CartScreen;

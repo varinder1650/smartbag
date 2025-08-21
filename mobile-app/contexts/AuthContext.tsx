@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, API_ENDPOINTS } from '../config/apiConfig';
+import {
+  API_BASE_URL,
+  API_ENDPOINTS,
+  createApiUrl,
+  API_REQUEST_TIMEOUT,
+} from '../config/apiConfig';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 
 // Type definitions
 interface User {
@@ -8,7 +14,7 @@ interface User {
   name: string;
   email: string;
   phone: string;
-  role: 'customer' | 'partner' | 'admin';
+  role: 'customer' | 'delivery_partner' | 'admin';
   address?: string;
   city?: string;
   state?: string;
@@ -20,7 +26,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   apiUrl: string;
-  login: (emailOrPhone: string, password: string) => Promise<LoginResult>;
+  login: (email: string, password: string) => Promise<LoginResult>;
   register: (userData: RegisterData) => Promise<RegisterResult>;
   logout: () => Promise<void>;
   updateProfile: (updatedData: UpdateProfileData) => Promise<UpdateProfileResult>;
@@ -66,10 +72,6 @@ interface TokenData {
   expiresIn?: number;
 }
 
-console.log('=== API IMPORT DEBUG ===');
-console.log('API_BASE_URL set:', API_BASE_URL);
-console.log('Type of API_BASE_URL:', typeof API_BASE_URL);
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = (): AuthContextType => {
@@ -85,16 +87,13 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  console.log('=== AUTH PROVIDER INITIALIZING ===');
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshToken, setRefreshTokenState] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('=== AUTH PROVIDER USE EFFECT ===');
     loadStoredAuth();
-    console.log('Using API URL:', API_BASE_URL);
   }, []);
 
   useEffect(() => {
@@ -117,7 +116,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const loadStoredAuth = async (): Promise<void> => {
     try {
-      console.log('=== LOADING STORED AUTH ===');
       const [storedToken, storedUser, storedRefreshToken] = await Promise.all([
         AsyncStorage.getItem('token'),
         AsyncStorage.getItem('user'),
@@ -136,7 +134,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Error loading stored auth:', error);
     } finally {
       setLoading(false);
-      console.log('=== AUTH PROVIDER LOADED ===');
     }
   };
 
@@ -161,24 +158,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (emailOrPhone: string, password: string): Promise<LoginResult> => {
+  const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
-      console.log('=== LOGIN DEBUG ===');
-      console.log('Attempting login with URL:', API_BASE_URL);
-      console.log('Full URL:', API_ENDPOINTS.LOGIN);
-      
-      const response = await fetch(API_ENDPOINTS.LOGIN, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithTimeout(
+        createApiUrl('auth/login'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
         },
-        body: JSON.stringify({ emailOrPhone, password }),
-      });
+        API_REQUEST_TIMEOUT
+      );
 
-      console.log('Login response status:', response.status);
-      
       const data = await response.json();
-      console.log('Login response data:', data);
 
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
@@ -196,10 +190,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         data.refresh_token ? AsyncStorage.setItem('refreshToken', data.refresh_token) : Promise.resolve(),
       ]);
 
-      console.log('=== LOGIN SUCCESS ===');
       return { success: true };
     } catch (error) {
-      console.error('=== LOGIN ERROR ===');
       console.error('Login error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
       return { success: false, error: errorMessage };
@@ -208,9 +200,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (userData: RegisterData): Promise<RegisterResult> => {
     try {
-      console.log('Attempting registration with URL:', API_BASE_URL);
-      console.log('Full URL:', API_ENDPOINTS.REGISTER);
-      
       const response = await fetch(API_ENDPOINTS.REGISTER, {
         method: 'POST',
         headers: {
@@ -219,9 +208,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         body: JSON.stringify(userData),
       });
 
-      console.log('Registration response status:', response.status);
       const data = await response.json();
-      console.log('Registration response data:', data);
 
       if (!response.ok) {
         throw new Error(data.message || 'Registration failed');
@@ -252,7 +239,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const updateProfile = async (updatedData: UpdateProfileData): Promise<UpdateProfileResult> => {
     try {
-      console.log('Updating profile with URL:', API_ENDPOINTS.PROFILE);
       const response = await fetch(API_ENDPOINTS.PROFILE, {
         method: 'PUT',
         headers: {
