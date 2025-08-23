@@ -68,7 +68,9 @@ export default function Login() {
 
     setLoading(true);
     setError(null);
-
+    // wsService.connect().then(() => {
+    //   wsService.authenticate(email, password);
+    // });
     wsService.authenticate(email, password);
   };
 

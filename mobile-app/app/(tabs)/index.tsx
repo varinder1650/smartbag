@@ -11,6 +11,7 @@ import {
   Alert,
   Dimensions,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +49,11 @@ interface Category {
   status: string;
 }
 
+// Interface for cart item quantities (local state)
+interface CartQuantities {
+  [productId: string]: number;
+}
+
 const HomeScreen = () => {
   const { user, token, loading: authLoading } = useAuth();
   
@@ -62,20 +68,24 @@ const HomeScreen = () => {
   const [showCartNotification, setShowCartNotification] = useState(false);
   const [userAddress, setUserAddress] = useState<string>('Add Address');
   
-  // ✅ Add refs to prevent infinite loops
+  // New state for cart quantities and loading states
+  const [cartQuantities, setCartQuantities] = useState<CartQuantities>({});
+  const [addingToCart, setAddingToCart] = useState<{[key: string]: boolean}>({});
+  
+  // Add refs to prevent infinite loops
   const initialDataFetched = useRef(false);
   const lastFetchTime = useRef(0);
   const isFetching = useRef(false);
 
-  // ✅ Memoized fetch functions to prevent recreation on every render
+  // Memoized fetch functions to prevent recreation on every render
   const fetchData = useCallback(async () => {
-    // ✅ Prevent multiple simultaneous fetches
+    // Prevent multiple simultaneous fetches
     if (isFetching.current) {
       console.log('Fetch already in progress, skipping...');
       return;
     }
     
-    // ✅ Prevent too frequent fetches (minimum 2 seconds between fetches)
+    // Prevent too frequent fetches (minimum 2 seconds between fetches)
     const now = Date.now();
     if (now - lastFetchTime.current < 2000) {
       console.log('Too soon since last fetch, skipping...');
@@ -143,10 +153,10 @@ const HomeScreen = () => {
       setLoading(false);
       isFetching.current = false;
     }
-  }, []); // ✅ Empty dependency array
+  }, []); // Empty dependency array
 
   const fetchFilteredProducts = useCallback(async (search: string = '', category: string | null = null) => {
-    // ✅ Don't fetch if already fetching
+    // Don't fetch if already fetching
     if (isFetching.current) {
       return;
     }
@@ -194,11 +204,12 @@ const HomeScreen = () => {
     } finally {
       isFetching.current = false;
     }
-  }, []); // ✅ Empty dependency array
+  }, []); // Empty dependency array
 
   const fetchCartCount = useCallback(async () => {
     if (!token) {
       setCartCount(0);
+      setCartQuantities({});
       return;
     }
     
@@ -211,15 +222,27 @@ const HomeScreen = () => {
       
       if (response.ok) {
         const cartData = await response.json();
-        setCartCount(cartData.items?.length || 0);
+        const items = cartData.items || [];
+        setCartCount(items.length);
+        
+        // Update cart quantities for products in cart
+        const quantities: CartQuantities = {};
+        items.forEach((item: any) => {
+          if (item.product && item.product._id) {
+            quantities[item.product._id] = item.quantity;
+          }
+        });
+        setCartQuantities(quantities);
       } else {
         setCartCount(0);
+        setCartQuantities({});
       }
     } catch (error) {
       console.error('Error fetching cart count:', error);
       setCartCount(0);
+      setCartQuantities({});
     }
-  }, [token]); // ✅ Only depend on token
+  }, [token]); // Only depend on token
 
   const fetchUserAddress = useCallback(async () => {
     if (!token) {
@@ -244,26 +267,188 @@ const HomeScreen = () => {
       console.error('Error fetching user address:', error);
       setUserAddress('Add Address');
     }
-  }, [token]); // ✅ Only depend on token
+  }, [token]); // Only depend on token
 
-  // ✅ Initial data fetch - only once
+  // New function to handle adding items to cart
+  const addToCart = useCallback(async (productId: string) => {
+    if (!token) {
+      Alert.alert(
+        'Login Required',
+        'Please login to add items to your cart',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => router.push('/auth/login') }
+        ]
+      );
+      return;
+    }
+
+    // Check if product exists and has stock
+    const product = [...products, ...filteredProducts].find(p => p._id === productId);
+    if (!product) {
+      Alert.alert('Error', 'Product not found');
+      return;
+    }
+
+    if (product.stock === 0) {
+      Alert.alert('Error', 'Product is out of stock');
+      return;
+    }
+
+    setAddingToCart(prev => ({ ...prev, [productId]: true }));
+
+    try {
+      const response = await fetch(API_ENDPOINTS.CART_ADD, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ productId, quantity: 1 }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update local cart quantities
+        setCartQuantities(prev => ({
+          ...prev,
+          [productId]: (prev[productId] || 0) + 1
+        }));
+        
+        // Update cart count
+        setCartCount(prev => prev + 1);
+
+        // Show notification
+        setShowCartNotification(true);
+        setTimeout(() => setShowCartNotification(false), 2000);
+      } else {
+        if (response.status === 401) {
+          Alert.alert(
+            'Session Expired',
+            'Please login again',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Login', onPress: () => router.push('/auth/login') }
+            ]
+          );
+        } else {
+          Alert.alert('Error', data.message || 'Failed to add to cart');
+        }
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      Alert.alert('Error', 'Failed to add to cart');
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [productId]: false }));
+    }
+  }, [token, products, filteredProducts]);
+
+  // New function to update cart quantity
+  const updateCartQuantity = useCallback(async (productId: string, newQuantity: number) => {
+    if (!token) {
+      Alert.alert('Error', 'Please login to manage cart');
+      return;
+    }
+
+    setAddingToCart(prev => ({ ...prev, [productId]: true }));
+
+    try {
+      if (newQuantity <= 0) {
+        // Remove item from cart - we need to find the cart item ID first
+        const cartResponse = await fetch(API_ENDPOINTS.CART, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        
+        if (cartResponse.ok) {
+          const cartData = await cartResponse.json();
+          const cartItem = cartData.items?.find((item: any) => item.product?._id === productId);
+          
+          if (cartItem) {
+            const response = await fetch(`${API_ENDPOINTS.CART_REMOVE}?item_id=${cartItem._id}`, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (response.ok) {
+              setCartQuantities(prev => {
+                const updated = { ...prev };
+                delete updated[productId];
+                return updated;
+              });
+              setCartCount(prev => Math.max(0, prev - (cartQuantities[productId] || 0)));
+            } else {
+              const errorData = await response.json();
+              Alert.alert('Error', errorData.message || 'Failed to remove item');
+            }
+          }
+        }
+      } else {
+        // Update quantity - we need to find the cart item ID first
+        const cartResponse = await fetch(API_ENDPOINTS.CART, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        
+        if (cartResponse.ok) {
+          const cartData = await cartResponse.json();
+          const cartItem = cartData.items?.find((item: any) => item.product?._id === productId);
+          
+          if (cartItem) {
+            const response = await fetch(API_ENDPOINTS.CART_UPDATE, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ itemId: cartItem._id, quantity: newQuantity }),
+            });
+
+            if (response.ok) {
+              const oldQuantity = cartQuantities[productId] || 0;
+              const quantityDiff = newQuantity - oldQuantity;
+              
+              setCartQuantities(prev => ({
+                ...prev,
+                [productId]: newQuantity
+              }));
+              
+              setCartCount(prev => prev + quantityDiff);
+            } else {
+              const errorData = await response.json();
+              Alert.alert('Error', errorData.message || 'Failed to update quantity');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating cart:', error);
+      Alert.alert('Error', 'Failed to update cart');
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [productId]: false }));
+    }
+  }, [token, cartQuantities]);
+
+  // Initial data fetch - only once
   useEffect(() => {
     if (!initialDataFetched.current && !isFetching.current) {
       console.log('Initial data fetch triggered');
       fetchData();
     }
-  }, []); // ✅ Empty dependency array - only run once
+  }, []); // Empty dependency array - only run once
 
-  // ✅ Auth-related fetches - only when auth state changes
+  // Auth-related fetches - only when auth state changes
   useEffect(() => {
     if (!authLoading) {
       console.log('Auth state changed, fetching user data');
       fetchCartCount();
       fetchUserAddress();
     }
-  }, [authLoading, fetchCartCount, fetchUserAddress]); // ✅ Stable dependencies
+  }, [authLoading, fetchCartCount, fetchUserAddress]); // Stable dependencies
 
-  // ✅ Focus effect for cart count only
+  // Focus effect for cart count only
   useFocusEffect(
     useCallback(() => {
       if (token && !authLoading) {
@@ -272,7 +457,7 @@ const HomeScreen = () => {
     }, [token, authLoading, fetchCartCount])
   );
 
-  // ✅ Search/filter effect with proper debouncing
+  // Search/filter effect with proper debouncing
   useEffect(() => {
     if (!initialDataFetched.current) {
       return; // Don't filter until initial data is loaded
@@ -288,9 +473,9 @@ const HomeScreen = () => {
     return () => {
       clearTimeout(handler);
     };
-  }, [searchQuery, selectedCategory, fetchFilteredProducts]); // ✅ Stable dependencies
+  }, [searchQuery, selectedCategory, fetchFilteredProducts]); // Stable dependencies
 
-  // ✅ Helper function to extract product ID
+  // Helper function to extract product ID
   const extractProductIdFromImages = (product: Product): string | null => {
     if (product.images && Array.isArray(product.images) && product.images.length > 0) {
       const firstImage = product.images[0];
@@ -413,6 +598,58 @@ const HomeScreen = () => {
     return `${IMAGE_BASE_URL}${iconSource}`;
   }, []);
 
+  // New component to render add to cart button
+  const renderCartButton = useCallback((product: Product) => {
+    const productId = product._id;
+    const quantity = cartQuantities[productId] || 0;
+    const isLoading = addingToCart[productId] || false;
+    const isOutOfStock = product.stock === 0;
+
+    if (isOutOfStock) {
+      return (
+        <View style={styles.outOfStockButton}>
+          <Text style={styles.outOfStockText}>Out of Stock</Text>
+        </View>
+      );
+    }
+
+    if (quantity > 0) {
+      return (
+        <View style={styles.quantityControls}>
+          <TouchableOpacity
+            style={[styles.quantityButton, isLoading && styles.disabledButton]}
+            onPress={() => updateCartQuantity(productId, quantity - 1)}
+            disabled={isLoading}
+          >
+            <Ionicons name="remove" size={16} color="#007AFF" />
+          </TouchableOpacity>
+          <Text style={styles.quantityText}>{quantity}</Text>
+          <TouchableOpacity
+            style={[styles.quantityButton, isLoading && styles.disabledButton]}
+            onPress={() => updateCartQuantity(productId, quantity + 1)}
+            disabled={isLoading || quantity >= product.stock}
+          >
+            <Ionicons name="add" size={16} color="#007AFF" />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.addToCartButton, isLoading && styles.disabledButton]}
+        onPress={() => addToCart(productId)}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Ionicons name="add" size={16} color="#fff" />
+        )}
+      </TouchableOpacity>
+    );
+  }, [cartQuantities, addingToCart, addToCart, updateCartQuantity]);
+
   const renderTopBar = useCallback(() => (
     <View style={styles.topBar}>
       <TouchableOpacity style={styles.locationContainer} onPress={() => router.push('/address')}>
@@ -495,53 +732,83 @@ const HomeScreen = () => {
 
   const renderProductTile = useCallback(({ item, index }: { item: Product; index: number }) => {
     const imageUrl = getImageUrl(item.images);
+    const isOutOfStock = item.stock === 0;
     
     return (
-      <TouchableOpacity 
-        style={styles.productTile} 
-        onPress={() => handleProductPress(item)}
-      >
-        <Image
-          source={{ uri: imageUrl }}
-          style={styles.productTileImage}
-          resizeMode="cover"
-          onError={() => {
-            console.log('Product image failed to load for:', item.name);
-          }}
-        />
-        <View style={styles.productTileContent}>
-          <Text style={styles.productTileName} numberOfLines={2}>{item.name}</Text>
-          <Text style={styles.productTileBrand} numberOfLines={1}>{item.brand?.name || 'No Brand'}</Text>
-          <Text style={styles.productTilePrice}>₹{item.price}</Text>
+      <View style={[styles.productTile, isOutOfStock && styles.outOfStockTile]}>
+        <TouchableOpacity 
+          onPress={() => handleProductPress(item)}
+          disabled={isOutOfStock}
+          style={isOutOfStock ? styles.disabledTouchable : undefined}
+        >
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: imageUrl }}
+              style={[styles.productTileImage, isOutOfStock && styles.dimmedImage]}
+              resizeMode="cover"
+              onError={() => {
+                console.log('Product image failed to load for:', item.name);
+              }}
+            />
+            {isOutOfStock && (
+              <View style={styles.outOfStockOverlay}>
+                <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.productTileContent}>
+            <Text style={[styles.productTileName, isOutOfStock && styles.dimmedText]} numberOfLines={2}>{item.name}</Text>
+            <Text style={[styles.productTileBrand, isOutOfStock && styles.dimmedText]} numberOfLines={1}>{item.brand?.name || 'No Brand'}</Text>
+            <Text style={[styles.productTilePrice, isOutOfStock && styles.dimmedPrice]}>₹{item.price}</Text>
+          </View>
+        </TouchableOpacity>
+        {/* Add to cart button */}
+        <View style={styles.cartButtonContainer}>
+          {renderCartButton(item)}
         </View>
-      </TouchableOpacity>
+      </View>
     );
-  }, [getImageUrl, handleProductPress]);
+  }, [getImageUrl, handleProductPress, renderCartButton]);
 
   const renderProductCard = useCallback(({ item, index }: { item: Product; index: number }) => {
     const imageUrl = getImageUrl(item.images);
+    const isOutOfStock = item.stock === 0;
     
     return (
-      <TouchableOpacity 
-        style={styles.productCard} 
-        onPress={() => handleProductPress(item)}
-      >
-        <Image
-          source={{ uri: imageUrl }}
-          style={styles.productCardImage}
-          resizeMode="cover"
-          onError={() => {
-            console.log('Product card image failed to load for:', item.name);
-          }}
-        />
-        <View style={styles.productCardContent}>
-          <Text style={styles.productCardName} numberOfLines={2}>{item.name}</Text>
-          <Text style={styles.productCardBrand} numberOfLines={1}>{item.brand?.name || 'No Brand'}</Text>
-          <Text style={styles.productCardPrice}>₹{item.price}</Text>
+      <View style={[styles.productCard, isOutOfStock && styles.outOfStockTile]}>
+        <TouchableOpacity 
+          onPress={() => handleProductPress(item)}
+          disabled={isOutOfStock}
+          style={isOutOfStock ? styles.disabledTouchable : undefined}
+        >
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: imageUrl }}
+              style={[styles.productCardImage, isOutOfStock && styles.dimmedImage]}
+              resizeMode="cover"
+              onError={() => {
+                console.log('Product card image failed to load for:', item.name);
+              }}
+            />
+            {isOutOfStock && (
+              <View style={styles.outOfStockOverlay}>
+                <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.productCardContent}>
+            <Text style={[styles.productCardName, isOutOfStock && styles.dimmedText]} numberOfLines={2}>{item.name}</Text>
+            <Text style={[styles.productCardBrand, isOutOfStock && styles.dimmedText]} numberOfLines={1}>{item.brand?.name || 'No Brand'}</Text>
+            <Text style={[styles.productCardPrice, isOutOfStock && styles.dimmedPrice]}>₹{item.price}</Text>
+          </View>
+        </TouchableOpacity>
+        {/* Add to cart button */}
+        <View style={styles.cartButtonContainer}>
+          {renderCartButton(item)}
         </View>
-      </TouchableOpacity>
+      </View>
     );
-  }, [getImageUrl, handleProductPress]);
+  }, [getImageUrl, handleProductPress, renderCartButton]);
 
   const renderCategorySection = useCallback(({ item: category, index }: { item: Category; index: number }) => {
     const categoryProducts = products.filter(product => product.category?._id === category._id);
@@ -628,8 +895,8 @@ const HomeScreen = () => {
           maxToRenderPerBatch={8}
           windowSize={10}
           getItemLayout={(data, index) => ({
-            length: 200, // Approximate height of product tile
-            offset: 200 * Math.floor(index / 2), // Account for 2 columns
+            length: 240, // Increased height to account for cart button
+            offset: 240 * Math.floor(index / 2), // Account for 2 columns
             index,
           })}
         />
@@ -674,8 +941,6 @@ const HomeScreen = () => {
     </SafeAreaView>
   );
 };
-
-// ... keep all your existing styles ...
 
 const styles = StyleSheet.create({
   container: {
@@ -815,6 +1080,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     maxWidth: '48%',
+    position: 'relative',
   },
   productTileImage: {
     width: '100%',
@@ -825,6 +1091,7 @@ const styles = StyleSheet.create({
   },
   productTileContent: {
     padding: 12,
+    paddingBottom: 50, // Make room for cart button
   },
   productTileName: {
     fontSize: 14,
@@ -854,6 +1121,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
   },
   productCardImage: {
     width: '100%',
@@ -864,6 +1132,7 @@ const styles = StyleSheet.create({
   },
   productCardContent: {
     padding: 12,
+    paddingBottom: 50, // Make room for cart button
   },
   productCardName: {
     fontSize: 14,
@@ -928,6 +1197,119 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  // New styles for cart buttons
+  cartButtonContainer: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    left: 8,
+  },
+  addToCartButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0f8ff',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    minHeight: 36,
+  },
+  quantityButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    minWidth: 30,
+    textAlign: 'center',
+  },
+  outOfStockButton: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  outOfStockText: {
+    color: '#999',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  // New styles for out of stock products
+  outOfStockTile: {
+    opacity: 0.6,
+  },
+  disabledTouchable: {
+    opacity: 1, // Keep touchable at full opacity since parent handles dimming
+  },
+  imageContainer: {
+    position: 'relative',
+  },
+  dimmedImage: {
+    opacity: 0.5,
+  },
+  outOfStockOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  outOfStockOverlayText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  dimmedText: {
+    opacity: 0.6,
+  },
+  dimmedPrice: {
+    opacity: 0.6,
+    color: '#999',
   },
 });
 

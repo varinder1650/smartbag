@@ -37,7 +37,7 @@ export const geocodeAddress = async (address) => {
     try {
       console.log('📡 Making geocoding API call...');
       
-      const response = await api.post('/geocode', { address }, {
+      const response = await api.post('/address/geocode', { address }, {
         timeout: 15000,
         headers: {
           'Content-Type': 'application/json',
@@ -208,7 +208,7 @@ const searchAddressesFn = async (query) => {
     try {
       console.log('📡 Making address search API call...');
       
-      const response = await api.get('/search-addresses', {
+      const response = await api.get('/address/search-addresses', {
         params: { query },
         timeout: 15000,
       });

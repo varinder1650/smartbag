@@ -5,6 +5,7 @@ from admin.connection_manager import manager
 from dotenv import load_dotenv
 from admin.utils.serialize import serialize_document
 from bson import ObjectId
+from starlette.websockets import WebSocketDisconnect
 
 load_dotenv()
 
@@ -63,22 +64,28 @@ async def handle_get_users(websocket: WebSocket, filters: dict, db):
             serialized_user = serialize_document(user)
             processed_users.append(serialized_user)
         
-        await websocket.send_json({
-            "type": "users_data",
-            "users": processed_users,
-            "total": total,
-            "page": page,
-            "pages": (total + limit - 1) // limit
-        })
+        try:
+            await websocket.send_json({
+                "type": "users_data",
+                "users": processed_users,
+                "total": total,
+                "page": page,
+                "pages": (total + limit - 1) // limit
+            })
+        except (WebSocketDisconnect, RuntimeError):
+            logger.warning("Tried to send data but the connection is lost")
         
     except Exception as e:
         logger.error(f"Error getting users: {e}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        await websocket.send_json({
-            "type": "error",
-            "message": "Failed to fetch users"
-        })
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Failed to fetch users"
+            })
+        except (WebSocketDisconnect,RuntimeError):
+            logger.warning("connection already disconnected")
 
 async def handle_update_user_role(websocket: WebSocket, data: dict, user_info: dict, db):
     """Update user role"""

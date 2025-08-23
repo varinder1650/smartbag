@@ -16,7 +16,7 @@ class OrderItem(BaseModel):
     #     return validate_object_id(v)
 
 class OrderItemResponse(BaseModel):
-    product: Dict[str, Any]  # Full product object
+    product: str
     quantity: int = Field(..., gt=0)
     price: float = Field(..., gt=0)
 
@@ -25,6 +25,7 @@ class DeliveryAddress(BaseModel):
     city: str
     state: str
     pincode: str
+    # coordinates: Dict
 
 class StatusChange(BaseModel):
     status: str

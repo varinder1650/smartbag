@@ -26,12 +26,18 @@ interface CartItem {
   quantity: number;
 }
 
+interface Coordinates{
+  latitude: number;
+  longitude: number;
+}
+
 interface AddressData {
   address: string;
   city: string;
   state: string;
   pincode: string;
   fullAddress: string;
+  coordinates: Coordinates;
 }
 
 export default function CheckoutScreen() {
@@ -93,9 +99,16 @@ export default function CheckoutScreen() {
         state: params.state as string || '',
         pincode: params.pincode as string || '',
         fullAddress: fullAddressFromParams,
+        coordinates: params.latitude && params.longitude
+        ? {
+            latitude: Number(params.latitude),
+            longitude: Number(params.longitude),
+          }
+        : undefined,
       });
     }
-  }, [params.address, params.fullAddress, params.city, params.state, params.pincode]);
+  }, [params.address, params.fullAddress, params.city, params.state, params.pincode,params.latitude,
+    params.longitude]);
 
   const getSubtotal = () => {
     return cartItems.reduce((total, item) => total + (item.product.price * item.quantity), 0);
@@ -122,22 +135,26 @@ export default function CheckoutScreen() {
       Alert.alert('Error', 'Please select a delivery address');
       return;
     }
+    console.log("pass the address checkpoint")
 
     if (!token) {
       Alert.alert('Error', 'Please login to place an order');
       return;
     }
+    console.log("passes the token checkpoint")
 
     // Simple validation
     if (!deliveryAddress.address || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.pincode) {
       Alert.alert('Error', 'Please provide complete address information');
       return;
     }
+    console.log("passes the address validation")
 
     if (!paymentMethod) {
       Alert.alert('Error', 'Please select a payment method');
       return;
     }
+    console.log("passess the payment checkpoint")
 
     setPlacingOrder(true);
     try {
@@ -152,6 +169,7 @@ export default function CheckoutScreen() {
           city: deliveryAddress.city.trim(),
           state: deliveryAddress.state.trim(),
           pincode: deliveryAddress.pincode.trim(),
+          coordinates: deliveryAddress.coordinates,
         },
         payment_method: paymentMethod,
         subtotal: getSubtotal(),
@@ -160,7 +178,7 @@ export default function CheckoutScreen() {
         app_fee: settings?.appFee || 0,
         total_amount: getTotal(),
       };
-
+      console.log(orderData)
       const response = await fetch(API_ENDPOINTS.ORDERS, {
         method: 'POST',
         headers: {

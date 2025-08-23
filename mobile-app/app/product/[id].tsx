@@ -48,13 +48,17 @@ export default function ProductDetailScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showCartNotification, setShowCartNotification] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
+  
+  // New state for cart quantity
+  const [cartQuantity, setCartQuantity] = useState(0);
+  
   const flatListRef = useRef<FlatList>(null);
   
-  // ✅ Add ref to prevent multiple fetches
+  // Add ref to prevent multiple fetches
   const isFetching = useRef(false);
   const productIdRef = useRef<string | null>(null);
 
-  // ✅ Memoized product ID extraction
+  // Memoized product ID extraction
   const getProductId = useCallback(() => {
     const id = localParams.id || 
               localParams.productId || 
@@ -68,15 +72,15 @@ export default function ProductDetailScreen() {
     return id as string;
   }, [localParams.id, localParams.productId, globalParams.id, globalParams.productId]);
 
-  // ✅ Memoized fetch function
+  // Memoized fetch function
   const fetchProduct = useCallback(async (productId: string) => {
-    // ✅ Prevent multiple simultaneous fetches
+    // Prevent multiple simultaneous fetches
     if (isFetching.current) {
       console.log('Product fetch already in progress, skipping...');
       return;
     }
     
-    // ✅ Prevent fetching the same product multiple times
+    // Prevent fetching the same product multiple times
     if (productIdRef.current === productId && product) {
       console.log('Product already loaded, skipping fetch...');
       return;
@@ -129,9 +133,37 @@ export default function ProductDetailScreen() {
       setLoading(false);
       isFetching.current = false;
     }
-  }, [product]); // ✅ Only depend on current product state
+  }, [product]); // Only depend on current product state
 
-  // ✅ Effect with stable dependencies
+  // Fetch cart quantity for this product
+  const fetchCartQuantity = useCallback(async () => {
+    if (!token || !product) {
+      setCartQuantity(0);
+      return;
+    }
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.CART, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const cartData = await response.json();
+        const items = cartData.items || [];
+        const cartItem = items.find((item: any) => item.product?._id === product._id);
+        setCartQuantity(cartItem ? cartItem.quantity : 0);
+      } else {
+        setCartQuantity(0);
+      }
+    } catch (error) {
+      console.error('Error fetching cart quantity:', error);
+      setCartQuantity(0);
+    }
+  }, [token, product]);
+
+  // Effect with stable dependencies
   useEffect(() => {
     const productId = getProductId();
     console.log('useEffect triggered with productId:', productId);
@@ -143,9 +175,16 @@ export default function ProductDetailScreen() {
       Alert.alert('Error', 'No product ID provided');
       router.back();
     }
-  }, []); // ✅ Empty dependency array - only run once on mount
+  }, []); // Empty dependency array - only run once on mount
 
-  // ✅ Memoized image processing
+  // Fetch cart quantity when product or token changes
+  useEffect(() => {
+    if (product && token) {
+      fetchCartQuantity();
+    }
+  }, [product, token, fetchCartQuantity]);
+
+  // Memoized image processing
   const getImageUrls = useCallback((images: (string | ProductImage)[]): string[] => {
     if (!images || !Array.isArray(images) || images.length === 0) {
       return ['https://via.placeholder.com/400x300?text=No+Image'];
@@ -167,7 +206,7 @@ export default function ProductDetailScreen() {
     });
   }, []);
 
-  // ✅ Memoized add to cart function
+  // Add to cart function
   const addToCart = useCallback(async () => {
     if (!token) {
       Alert.alert(
@@ -210,6 +249,10 @@ export default function ProductDetailScreen() {
       const data = await response.json();
 
       if (response.ok) {
+        // Update local cart quantity
+        setCartQuantity(prev => prev + 1);
+
+        // Show notification
         setShowCartNotification(true);
         setTimeout(() => setShowCartNotification(false), 2000);
       } else {
@@ -232,9 +275,83 @@ export default function ProductDetailScreen() {
     } finally {
       setAddingToCart(false);
     }
-  }, [token, product]); // ✅ Stable dependencies
+  }, [token, product]);
 
-  // ✅ Memoized viewable items changed handler
+  // Update cart quantity function
+  const updateCartQuantity = useCallback(async (newQuantity: number) => {
+    if (!token || !product) {
+      Alert.alert('Error', 'Please login to manage cart');
+      return;
+    }
+
+    setAddingToCart(true);
+
+    try {
+      if (newQuantity <= 0) {
+        // Remove item from cart - we need to find the cart item ID first
+        const cartResponse = await fetch(API_ENDPOINTS.CART, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        
+        if (cartResponse.ok) {
+          const cartData = await cartResponse.json();
+          const cartItem = cartData.items?.find((item: any) => item.product?._id === product._id);
+          
+          if (cartItem) {
+            const response = await fetch(`${API_ENDPOINTS.CART_REMOVE}?item_id=${cartItem._id}`, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (response.ok) {
+              setCartQuantity(0);
+            } else {
+              const errorData = await response.json();
+              Alert.alert('Error', errorData.message || 'Failed to remove item');
+            }
+          }
+        }
+      } else {
+        // Update quantity - we need to find the cart item ID first
+        const cartResponse = await fetch(API_ENDPOINTS.CART, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        
+        if (cartResponse.ok) {
+          const cartData = await cartResponse.json();
+          const cartItem = cartData.items?.find((item: any) => item.product?._id === product._id);
+          
+          if (cartItem) {
+            const response = await fetch(API_ENDPOINTS.CART_UPDATE, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ itemId: cartItem._id, quantity: newQuantity }),
+            });
+
+            if (response.ok) {
+              setCartQuantity(newQuantity);
+            } else {
+              const errorData = await response.json();
+              Alert.alert('Error', errorData.message || 'Failed to update quantity');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating cart:', error);
+      Alert.alert('Error', 'Failed to update cart');
+    } finally {
+      setAddingToCart(false);
+    }
+  }, [token, product]);
+
+  // Memoized viewable items changed handler
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) {
       setCurrentImageIndex(viewableItems[0].index || 0);
@@ -245,7 +362,7 @@ export default function ProductDetailScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  // ✅ Memoized image item renderer
+  // Memoized image item renderer
   const renderImageItem = useCallback(({ item, index }: { item: string; index: number }) => {
     return (
       <View style={styles.imageItem}>
@@ -261,7 +378,7 @@ export default function ProductDetailScreen() {
     );
   }, []);
 
-  // ✅ Memoized dot indicator renderer
+  // Memoized dot indicator renderer
   const renderDotIndicator = useCallback(() => {
     if (!product) return null;
     
@@ -283,6 +400,57 @@ export default function ProductDetailScreen() {
       </View>
     );
   }, [product, currentImageIndex, getImageUrls]);
+
+  // Render cart button based on quantity
+  const renderCartButton = useCallback(() => {
+    const isOutOfStock = product?.stock === 0;
+
+    if (isOutOfStock) {
+      return (
+        <View style={[styles.addToCartButton, styles.outOfStockButton]}>
+          <Text style={styles.outOfStockButtonText}>Out of Stock</Text>
+        </View>
+      );
+    }
+
+    if (cartQuantity > 0) {
+      return (
+        <View style={styles.quantityControlsContainer}>
+          <TouchableOpacity
+            style={[styles.quantityControlButton, addingToCart && styles.disabledButton]}
+            onPress={() => updateCartQuantity(cartQuantity - 1)}
+            disabled={addingToCart}
+          >
+            <Ionicons name="remove" size={20} color="#007AFF" />
+          </TouchableOpacity>
+          <Text style={styles.quantityControlText}>{cartQuantity}</Text>
+          <TouchableOpacity
+            style={[styles.quantityControlButton, addingToCart && styles.disabledButton]}
+            onPress={() => updateCartQuantity(cartQuantity + 1)}
+            disabled={addingToCart || cartQuantity >= (product?.stock || 0)}
+          >
+            <Ionicons name="add" size={20} color="#007AFF" />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.addToCartButton, 
+          addingToCart && styles.disabledButton
+        ]}
+        onPress={addToCart}
+        disabled={addingToCart}
+      >
+        <Ionicons name="bag-add" size={20} color="#fff" style={{ marginRight: 8 }} />
+        <Text style={styles.addToCartText}>
+          {addingToCart ? 'Adding...' : 'Add to Cart'}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, [product, cartQuantity, addingToCart, addToCart, updateCartQuantity]);
 
   if (loading) {
     return (
@@ -362,7 +530,7 @@ export default function ProductDetailScreen() {
             color={product.stock > 0 ? "#4CAF50" : "#FF5722"} 
           />
           <Text style={[styles.stockText, { color: product.stock > 0 ? "#4CAF50" : "#FF5722" }]}>
-            {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+            {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
           </Text>
         </View>
         
@@ -399,21 +567,9 @@ export default function ProductDetailScreen() {
         </View>
       </View>
 
-      {/* Add to Cart Button */}
+      {/* Cart Button */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.addToCartButton, 
-            (addingToCart || product.stock === 0) && styles.disabledButton
-          ]}
-          onPress={addToCart}
-          disabled={addingToCart || product.stock === 0}
-        >
-          <Ionicons name="bag-add" size={20} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.addToCartText}>
-            {addingToCart ? 'Adding...' : product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-          </Text>
-        </TouchableOpacity>
+        {renderCartButton()}
       </View>
 
       {/* Cart Notification */}
@@ -624,15 +780,59 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  disabledButton: {
-    backgroundColor: '#ccc',
+  outOfStockButton: {
+    backgroundColor: '#f5f5f5',
     shadowOpacity: 0,
     elevation: 0,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  outOfStockButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: '600',
   },
   addToCartText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  // New styles for quantity controls
+  quantityControlsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  quantityControlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  quantityControlText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    minWidth: 50,
+    textAlign: 'center',
   },
   notification: {
     position: 'absolute',

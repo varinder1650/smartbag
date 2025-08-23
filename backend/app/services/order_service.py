@@ -13,7 +13,7 @@ class OrderService:
         if not order_data.get('items'):
             raise ValueError("Order item are required")
 
-        if not order_data.get('deliver_address'):
+        if not order_data.get('delivery_address'):
             raise ValueError("address not found")
 
         if not order_data.get('total_amount') or order_data['total_amount'] <= 0:

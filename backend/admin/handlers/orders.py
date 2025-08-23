@@ -25,7 +25,7 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
         
         # Get orders
         orders = await db.find_many("orders", query, sort=[("created_at", -1)], limit=100)
-        
+        # print(orders)
         serialized_orders = [serialize_document(order) for order in orders]
         
         await websocket.send_json({

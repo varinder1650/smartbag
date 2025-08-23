@@ -22,11 +22,17 @@ async def create_order(
         
         order_service = OrderService(db)
         order_id = await order_service.create_order(order_data, current_user)
-        print(current_user)
-        print(order_data)
+        # print(current_user)
+        # print(order_data)
         logger.info(f"Order created successfully with ID: {order_id}")
         
         created_order = await db.find_one("orders", {"_id": ObjectId(order_id)})
+        created_order['_id'] = str(created_order["_id"])
+        created_order["user"] = str(created_order['user'])
+        for item in created_order.get("items", []):
+            if isinstance(item.get("product"), ObjectId):
+                item["product"] = str(item["product"])
+        # print(created_order)
         return OrderResponse(**created_order)
         
     except ValueError as e:
@@ -52,7 +58,7 @@ async def get_my_orders(
             {"user": ObjectId(current_user.id)},
             sort=[("created_at", -1)]
         )
-        
+        print(orders)
         # enhanced_orders = [await enhance_order_details(order, db) for order in orders]
         
         return [OrderResponseEnhanced(**order) for order in orders]

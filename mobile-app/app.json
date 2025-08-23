@@ -23,6 +23,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.ios.smartbag",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to help you select your delivery address.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to help you select your delivery address."
