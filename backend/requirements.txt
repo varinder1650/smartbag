@@ -3,3 +3,7 @@ uvicorn[standard]
 python-multipart
 python-jose[cryptography]
 passlib[bcrypt]
+motor
+pydantic-settings
+pydantic[email]
+slowapi

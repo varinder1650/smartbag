@@ -46,7 +46,8 @@
         "krutrimMaps": {
           "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
         }
-      }
+      },
+      "package":"com.ios.smartbag"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -56,6 +57,12 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to help you select your delivery address."
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.1029983278193-mgl5t7mtqajk2a3vocs6qchbir317o9q"
         }
       ]
     ]
