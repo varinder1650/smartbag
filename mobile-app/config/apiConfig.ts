@@ -87,7 +87,8 @@ export const API_ENDPOINTS: ApiEndpoints = {
   REGISTER: joinApiUrl(API_BASE_URL, 'auth/register'),
   PROFILE: joinApiUrl(API_BASE_URL, 'auth/profile'),
   REFRESH_TOKEN: joinApiUrl(API_BASE_URL, 'auth/refresh'),
- 
+  AUTH_GOOGLE: joinApiUrl(API_BASE_URL,'/auth/google'),
+
   // Products - Fixed the template literal issue
   PRODUCTS: joinApiUrl(API_BASE_URL, 'products'),
   PRODUCT_BY_ID: (id: string) => joinApiUrl(API_BASE_URL, `products/${id}`),

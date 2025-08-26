@@ -24,20 +24,37 @@ const AppContent = () => {
   const { isAuthenticated, user } = useAuthStore();
 
   useEffect(() => {
+    // Connect WebSocket once on app start
+    wsService.connect().catch(err => {
+      console.error("WebSocket connection failed", err);
+    });
+  
+    // If user is authenticated (from persisted storage), send token immediately
     if (isAuthenticated && user?.token) {
-      wsService.connect().then(() => {
-        wsService.send({ type: 'authenticate', token: user.token });
-      }).catch(err => {
-        console.error("Initial WebSocket connection failed", err);
+      console.log('User already authenticated, sending token to WebSocket');
+      wsService.send({ 
+        type: 'authenticate', 
+        payload: { token: user.token }
       });
     }
-
+  
     return () => {
       if (wsService.isConnected()) {
         wsService.disconnect();
       }
     };
-  }, [isAuthenticated, user]);
+  }, []); // Empty dependency array - only run once
+
+  // Send token when user becomes authenticated (e.g., after login)
+  useEffect(() => {
+    if (isAuthenticated && user?.token && wsService.isConnected()) {
+      console.log('User authenticated, sending token to WebSocket');
+      wsService.send({ 
+        type: 'authenticate', 
+        payload: { token: user.token }
+      });
+    }
+  }, [isAuthenticated, user?.token]);
 
   return (
     <Routes>

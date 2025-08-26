@@ -12,16 +12,16 @@ ALGORITHM = "HS256"
 async def authenticate_admin(credentials: dict):
     """Authenticate admin user"""
     db = get_database()
-    
+    print("inside auth function")
     email = credentials.get("email")
     password = credentials.get("password")
-    # print(email,password)
+    print(email,password)
     if not email or not password:
         return None
     
     # Get user from database
     user = await db.find_one("users", {"email": email})
-    # print(user)    
+    print(user)    
     if not user:
         return None
     

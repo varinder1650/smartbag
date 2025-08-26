@@ -34,10 +34,13 @@ async def admin_websocket_handler(websocket: WebSocket):
         auth_message = await websocket.receive_json()
         print(f"Auth message received: {auth_message}")
         
-        if auth_message.get("email") and auth_message.get("password"):
+        email = auth_message.get('payload',{}).get("email")
+        password = auth_message.get('payload',{}).get('password')
+        
+        if email and password:
             # Initial login
-            user_info = await authenticate_admin(auth_message)
-            print("user authentication:", user_info)
+            user_info = await authenticate_admin({"email":email,"password":password})
+            # print("user authentication:", user_info)
         elif auth_message.get("token"):
             # Reconnection with token
             user_info = await verify_admin_token(auth_message["token"])

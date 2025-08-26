@@ -70,3 +70,55 @@ async def login_user(user_data:UserLogin, db:DatabaseManager = Depends(get_datab
 @router.get("/profile")
 async def get_me(current_user = Depends(get_current_user)):
     return current_user
+
+
+# Backend endpoint example
+@router.post("/google")
+async def googleLogin():
+    print("in google endpoint: ")
+    # try {
+    #     const { googleToken, user } = req.body;
+        
+    #     // Verify Google token with Google
+    #     const ticket = await client.verifyIdToken({
+    #     idToken: googleToken,
+    #     audience: YOUR_GOOGLE_CLIENT_ID,
+    #     });
+        
+    #     const payload = ticket.getPayload();
+        
+    #     // Check if user exists
+    #     let existingUser = await User.findOne({ 
+    #     $or: [
+    #         { googleId: payload.sub },
+    #         { email: payload.email }
+    #     ]
+    #     });
+        
+    #     if (!existingUser) {
+    #     // Create new user
+    #     existingUser = await User.create({
+    #         googleId: payload.sub,
+    #         email: payload.email,
+    #         name: payload.name,
+    #         profilePicture: payload.picture,
+    #         role: 'customer',
+    #     });
+    #     } else {
+    #     // Update existing user with Google info
+    #     existingUser.googleId = payload.sub;
+    #     existingUser.profilePicture = payload.picture;
+    #     await existingUser.save();
+    #     }
+        
+    #     // Generate your app's tokens
+    #     const access_token = generateAccessToken(existingUser);
+    #     const refresh_token = generateRefreshToken(existingUser);
+        
+    #     res.json({
+    #     access_token,
+    #     refresh_token,
+    #     user: existingUser,
+    #     });
+    # } catch (error) {
+    #     res.status(400).json({ message: 'Google authentication failed' });
