@@ -5,7 +5,7 @@ from db.db_manager import get_database
 import logging
 from admin.handlers.products import send_products, create_product, delete_product, update_product
 from admin.handlers.brand import send_brands, create_brand, update_brand, delete_brand
-from admin.handlers.orders import send_orders
+from admin.handlers.orders import send_orders,update_order_status
 from admin.handlers.category import send_categories, create_categories, update_category, delete_category
 from admin.handlers.customers import send_customers
 from admin.handlers.auth import (
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 async def admin_websocket_handler(websocket: WebSocket):
     """Single WebSocket endpoint for all admin functionality"""
     await websocket.accept()
+    logger.info("WebSocket connection accepted")
     
     user_info = None
     authenticated = False
@@ -32,30 +33,55 @@ async def admin_websocket_handler(websocket: WebSocket):
     try:
         # Authentication phase
         auth_message = await websocket.receive_json()
-        print(f"Auth message received: {auth_message}")
+        logger.info(f"Auth message received: {auth_message}")
         
-        email = auth_message.get('payload',{}).get("email")
-        password = auth_message.get('payload',{}).get('password')
+        # Extract credentials from payload
+        payload = auth_message.get('payload', {})
+        email = payload.get("email")
+        password = payload.get("password") 
+        token = payload.get("token")
         
+        # Try different authentication methods
         if email and password:
-            # Initial login
-            user_info = await authenticate_admin({"email":email,"password":password})
-            # print("user authentication:", user_info)
-        elif auth_message.get("token"):
-            # Reconnection with token
-            user_info = await verify_admin_token(auth_message["token"])
-        
-        if not user_info:
-            await websocket.send_json({"type": "error", "message": "Authentication failed"})
+            # Initial login with credentials
+            logger.info(f"Authenticating with email/password: {email}")
+            user_info = await authenticate_admin({"email": email, "password": password})
+            
+        elif token:
+            # Token-based authentication (reconnection)
+            logger.info("Authenticating with token")
+            user_info = await verify_admin_token(token)
+            
+        else:
+            logger.error("No valid authentication credentials provided")
+            await websocket.send_json({
+                "type": "error", 
+                "message": "No valid authentication credentials provided"
+            })
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         
-        # 🔍 DEBUG: Log user_info structure
-        logger.info(f"=== AUTHENTICATION SUCCESS ===")
-        logger.info(f"user_info type: {type(user_info)}")
-        logger.info(f"user_info content: {user_info}")
-        logger.info(f"user_info keys: {list(user_info.keys()) if isinstance(user_info, dict) else 'Not a dict'}")
-        logger.info(f"=== END AUTHENTICATION DEBUG ===")
+        # Check authentication result
+        if not user_info:
+            logger.error("Authentication failed - no user info returned")
+            await websocket.send_json({
+                "type": "error", 
+                "message": "Authentication failed"
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        
+        # Check for authentication errors (token expired, etc.)
+        if isinstance(user_info, dict) and user_info.get("error"):
+            logger.error(f"Authentication error: {user_info['error']}")
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Authentication failed: {user_info['error']}"
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        
+        logger.info(f"Authentication successful for user: {user_info.get('email', 'unknown')}")
         
         # Register connection
         await manager.connect(websocket, user_info)
@@ -66,19 +92,30 @@ async def admin_websocket_handler(websocket: WebSocket):
             "type": "auth_success",
             "user": user_info
         })
+        logger.info("Auth success message sent")
         
         # Main message handling loop
         await handle_admin_messages(websocket, user_info)
         
     except WebSocketDisconnect:
+        logger.info("WebSocket disconnected normally")
         if authenticated and user_info:
             manager.disconnect(websocket)
             logger.info(f"Admin {user_info.get('email', 'unknown')} disconnected")
+            
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
         if authenticated:
             manager.disconnect(websocket)
+            
         try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Server error: {str(e)}"
+            })
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         except:
             pass
@@ -89,17 +126,14 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
     db = get_database()
     subscriptions = set()
     
-    # 🔍 DEBUG: Log user_info at start of message handling
-    logger.info(f"=== MESSAGE HANDLER STARTED ===")
-    logger.info(f"user_info for message handling: {user_info}")
-    logger.info(f"=== END MESSAGE HANDLER DEBUG ===")
+    logger.info(f"Message handler started for user: {user_info.get('email', 'unknown')}")
     
     while True:
         try:
             message = await websocket.receive_json()
             msg_type = message.get("type")
             
-            logger.info(f"Received message type: {msg_type} from {user_info.get('email', 'unknown')}")
+            logger.info(f"Received message type: {msg_type}")
             
             if msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -118,16 +152,23 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
             
             # Products handlers
             elif msg_type == "get_products":
-                await send_products(websocket, db)
+                # Check if client is still connected before processing
+                if websocket.client_state.value == 1:
+                    await send_products(websocket, db)
+                else:
+                    logger.info("Client disconnected before processing get_products")
             
             elif msg_type == "create_product":
-                await create_product(websocket, message.get("data"), user_info, db)
+                if websocket.client_state.value == 1:
+                    await create_product(websocket, message.get("data"), user_info, db)
             
             elif msg_type == "update_product":
-                await update_product(websocket, message.get("data"), user_info, db)
+                if websocket.client_state.value == 1:
+                    await update_product(websocket, message.get("data"), user_info, db)
             
             elif msg_type == "delete_product":
-                await delete_product(websocket, message.get("data"), user_info, db)
+                if websocket.client_state.value == 1:
+                    await delete_product(websocket, message.get("data"), user_info, db)
            
             # Orders handlers
             elif msg_type == "get_orders":
@@ -159,7 +200,7 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
             elif msg_type == "delete_brand":
                 await delete_brand(websocket, message.get("data"), user_info, db)
 
-            # Users handlers - ✅ NOW IMPLEMENTED
+            # Users handlers
             elif msg_type == "get_users":
                 await handle_get_users(websocket, message.get("filters", {}), db)
 
@@ -189,14 +230,12 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
                 await send_customers(websocket, db)
 
             elif msg_type == "logout":
+                logger.info(f"User {user_info.get('email')} logging out")
                 break
 
-            # ✅ Order status handler (placeholder for future implementation)
+            # Order status handler (placeholder)
             elif msg_type == "update_order_status":
-                await websocket.send_json({
-                    "type": "info",
-                    "message": "Order status update feature coming soon"
-                })
+                await update_order_status(websocket,message.get("data"),user_info,db)
 
             else:
                 logger.warning(f"Unknown message type: {msg_type}")
@@ -208,10 +247,12 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
         except WebSocketDisconnect:
             logger.info(f"Admin {user_info.get('email', 'unknown')} disconnected during message handling")
             break
+            
         except Exception as e:
-            logger.error(f"Error handling message {msg_type}: {e}")
+            logger.error(f"Error handling message {msg_type if 'msg_type' in locals() else 'unknown'}: {e}")
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
+            
             try:
                 await websocket.send_json({
                     "type": "error",

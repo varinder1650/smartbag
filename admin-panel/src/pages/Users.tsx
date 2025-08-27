@@ -311,7 +311,7 @@ export default function Users() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {user.joinedAt ? format(new Date(user.joinedAt), "MMM dd, yyyy") : 
+                        {user.joined_at ? format(new Date(user.joined_at), "MMM dd, yyyy") : 
                          user.created_at ? format(new Date(user.created_at), "MMM dd, yyyy") : 'N/A'}
                       </TableCell>
                       <TableCell>

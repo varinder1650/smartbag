@@ -26,7 +26,7 @@ import { useDashboardStore } from "@/store/dashboardStore";
 import { wsService } from "@/services/websocket";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Eye, Truck, Clock, CheckCircle, Package, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 export default function Orders() {
   const { orders, setOrders } = useDashboardStore();
@@ -79,6 +79,7 @@ export default function Orders() {
       console.log('Received orders data:', data);
       try {
         const ordersArray = Array.isArray(data.orders) ? data.orders : [];
+        console.log(ordersArray)
         setOrders(ordersArray);
         setIsLoading(false);
       } catch (error) {
@@ -357,6 +358,7 @@ export default function Orders() {
                     <TableHead>Status</TableHead>
                     <TableHead>Delivery Partner</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Time</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -366,8 +368,8 @@ export default function Orders() {
                       return (
                         <TableRow key={order._id || order.id}>
                           <TableCell className="font-medium">#{order.id || 'N/A'}</TableCell>
-                          <TableCell>{order.customer || 'Unknown'}</TableCell>
-                          <TableCell>${order.total || '0.00'}</TableCell>
+                          <TableCell>{order.user || 'Unknown'}</TableCell>
+                          <TableCell>₹{order.total || '0.00'}</TableCell>
                           <TableCell>
                             <StatusBadge status={order.status || 'pending'} />
                           </TableCell>
@@ -377,10 +379,19 @@ export default function Orders() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {order.createdAt ? (
-                              format(new Date(order.createdAt), "MMM dd, yyyy HH:mm")
+                            {order.created_at ? (
+                              format(parseISO(order.created_at), "MMM dd, yyyy")
                             ) : (
                               <span className="text-muted-foreground">N/A</span>
+                              
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {order.created_at ? (
+                              format(parseISO(order.created_at), "HH:mm")
+                            ) : (
+                              <span className="text-muted-foreground">N/A</span>
+                              
                             )}
                           </TableCell>
                           <TableCell>
@@ -443,14 +454,14 @@ export default function Orders() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <p><strong>Name:</strong> {selectedOrder.customer || 'N/A'}</p>
+                      <p><strong>Name:</strong> {selectedOrder.user || 'N/A'}</p>
                       <p><strong>Order Date:</strong> {
-                        selectedOrder.createdAt ? 
-                          format(new Date(selectedOrder.createdAt), "MMM dd, yyyy HH:mm") : 
+                        selectedOrder.created_at ? 
+                          format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm") : 
                           'N/A'
                       }</p>
                       <p><strong>Status:</strong> <StatusBadge status={selectedOrder.status || 'pending'} /></p>
-                      <p><strong>Total:</strong> ${selectedOrder.total || '0.00'}</p>
+                      <p><strong>Total:</strong> ₹{selectedOrder.total || '0.00'}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -525,12 +536,12 @@ export default function Orders() {
                                         <Package className="h-5 w-5 text-muted-foreground" />
                                       </div>
                                     )}
-                                    <span>{item.name || 'Unknown Product'}</span>
+                                    <span>{item.product || 'Unknown Product'}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell>${item.price || '0.00'}</TableCell>
+                                <TableCell>₹{item.price || '0.00'}</TableCell>
                                 <TableCell>{item.quantity || 0}</TableCell>
-                                <TableCell>${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</TableCell>
+                                <TableCell>₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</TableCell>
                               </TableRow>
                             );
                           } catch (error) {

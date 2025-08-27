@@ -3,18 +3,23 @@ import logging
 from datetime import datetime
 from admin.utils.serialize import serialize_document
 from admin.connection_manager import manager
-# from utils.order_helpers import enhance_order_details
+from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
 async def send_orders(websocket: WebSocket, filters: dict, db):
     """Send orders based on filters"""
     try:
+        # Check if WebSocket is still connected
+        if hasattr(websocket, 'client_state') and websocket.client_state.value != 1:
+            logger.warning("WebSocket connection is not active, skipping send_orders")
+            return
+            
         query = {}
         
         # Apply filters
         if filters.get("status"):
-            query["status"] = filters["status"]
+            query["order_status"] = filters["status"]
         if filters.get("from_date"):
             query["created_at"] = {"$gte": datetime.fromisoformat(filters["from_date"])}
         if filters.get("to_date"):
@@ -25,79 +30,99 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
         
         # Get orders
         orders = await db.find_many("orders", query, sort=[("created_at", -1)], limit=100)
-        # print(orders)
-        serialized_orders = [serialize_document(order) for order in orders]
+        
+        # Serialize orders and add frontend-friendly field mappings
+        serialized_orders = []
+        for order in orders:
+            try:
+                # Serialize the order first (handles datetime conversion)
+                serialized_order = serialize_document(order)
+                
+                # Add frontend-friendly field mappings
+                serialized_order["id"] = serialized_order["_id"]  # Add id field
+                serialized_order["customer"] = "Customer"  # Placeholder - you can enhance this later
+                serialized_order["total"] = serialized_order.get("total_amount", 0)  # Map total_amount to total
+                serialized_order["status"] = serialized_order.get("order_status", "pending")  # Map order_status to status
+                
+                serialized_orders.append(serialized_order)
+                
+            except Exception as serialize_error:
+                logger.error(f"Error serializing order {order.get('_id')}: {serialize_error}")
+                continue
+        
+        logger.info(f"Sending {len(serialized_orders)} serialized orders")
         
         await websocket.send_json({
             "type": "orders_data",
-            "channel": "orders",
+            "channel": "orders", 
             "orders": serialized_orders
         })
         
     except Exception as e:
         logger.error(f"Error sending orders: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Failed to fetch orders"
+            })
+        except:
+            logger.info("Could not send error message - client disconnected")
+
+async def update_order_status(websocket: WebSocket, data: dict, user_info: dict, db):
+    """Update order status with correct field mappings"""
+    try:
+        # Handle both orderId and order_id from frontend
+        order_id = data.get("order_id") or data.get("orderId") 
+        new_status = data.get("status")
+        delivery_partner = data.get("delivery_partner")
+        notes = data.get("notes", "")
+        
+        if not order_id or not new_status:
+            await websocket.send_json({
+                "type": "error", 
+                "message": "Order ID and status are required"
+            })
+            return
+        
+        # Update with correct database field names
+        update_data = {
+            "order_status": new_status,  # Database uses order_status
+            "updated_at": datetime.utcnow(),
+        }
+        
+        if delivery_partner:
+            update_data["delivery_partner"] = delivery_partner
+            
+        # Update order
+        result = await db.update_one(
+            "orders",
+            {"_id": ObjectId(order_id)}, 
+            {"$set": update_data}
+        )
+        
+        if result:
+            # Get updated order and transform for frontend
+            updated_order = await db.find_one("orders", {"_id": ObjectId(order_id)})
+            serialized_order = serialize_document(updated_order)
+            
+            # Map fields for frontend
+            serialized_order["id"] = serialized_order["_id"]
+            serialized_order["total"] = serialized_order.get("total_amount", 0)
+            serialized_order["status"] = serialized_order.get("order_status", "pending")
+            
+            await websocket.send_json({
+                "type": "order_status_updated",
+                "order": serialized_order
+            })
+        
+    except Exception as e:
+        logger.error(f"Error updating order status: {e}")
         await websocket.send_json({
             "type": "error",
-            "message": "Failed to fetch orders"
+            "message": f"Failed to update order status: {str(e)}"
         })
-
-
-# async def handle_order_status_update(websocket: WebSocket, data: dict, user_info: dict, db):
-#     """Update order status"""
-#     try:
-#         order_id = data.get("orderId")
-#         new_status = data.get("status")
-        
-#         if not order_id or not new_status:
-#             await websocket.send_json({
-#                 "type": "error",
-#                 "message": "Order ID and status are required"
-#             })
-#             return
-        
-#         # Update order
-#         update_data = {
-#             "status": new_status,
-#             "updated_at": datetime.utcnow(),
-#             "updated_by": user_info["email"]
-#         }
-        
-#         result = await db.update_one(
-#             "orders",
-#             {"_id": ObjectId(order_id)},
-#             {"$set": update_data}
-#         )
-        
-#         if result:
-#             # Get updated order
-#             updated_order = await db.find_one("orders", {"_id": ObjectId(order_id)})
-#             updated_order['_id'] = str(updated_order['_id'])
-#             updated_order['user_id'] = str(updated_order['user_id'])
-            
-#             # Send success response
-#             await websocket.send_json({
-#                 "type": "order_updated",
-#                 "order": updated_order
-#             })
-            
-#             # Broadcast to all admins
-#             await manager.broadcast_to_channel("orders", {
-#                 "type": "order_updated",
-#                 "order": updated_order,
-#                 "updated_by": user_info["email"]
-#             })
-#         else:
-#             await websocket.send_json({
-#                 "type": "error",
-#                 "message": "Order not found"
-#             })
-            
-#     except Exception as e:
-#         logger.error(f"Error updating order: {e}")
-#         await websocket.send_json({
-#             "type": "error",
-#             "message": f"Failed to update order: {str(e)}"
-#         })
 
 # async def update_delivery_partner_stats(partner_id: ObjectId, db):
 #     """Update delivery partner statistics"""

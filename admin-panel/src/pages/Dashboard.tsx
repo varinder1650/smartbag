@@ -124,7 +124,7 @@ export default function Dashboard() {
       
       const dayRevenue = ordersData
         .filter(order => {
-          const orderDate = new Date(order.createdAt);
+          const orderDate = new Date(order.created_at);
           return orderDate.toDateString() === date.toDateString() && 
                  order.status === 'delivered';
         })
@@ -156,7 +156,7 @@ export default function Dashboard() {
   const statsCards = [
     {
       title: "Total Revenue",
-      value: `$${(stats?.totalRevenue || 0).toLocaleString()}`,
+      value: `₹${(stats?.totalRevenue || 0).toLocaleString()}`,
       icon: DollarSign,
       description: "Total revenue generated",
     },
@@ -234,7 +234,7 @@ export default function Dashboard() {
                     <YAxis />
                     <Tooltip
                       labelFormatter={(value) => format(new Date(value), "MMM dd, yyyy")}
-                      formatter={(value) => [`$${value}`, "Revenue"]}
+                      formatter={(value) => [`₹${value}`, "Revenue"]}
                     />
                     <Line
                       type="monotone"
@@ -272,13 +272,13 @@ export default function Dashboard() {
                         <p className="font-medium">#{order.id}</p>
                         <StatusBadge status={order.status} />
                       </div>
-                      <p className="text-sm text-muted-foreground">{order.customer}</p>
+                      <p className="text-sm text-muted-foreground">{order.user}</p>
                       <p className="text-xs text-muted-foreground">
-                        {order.createdAt ? format(new Date(order.createdAt), "MMM dd, HH:mm") : 'N/A'}
+                        {order.created_at ? format(new Date(order.created_at), "MMM dd, HH:mm") : 'N/A'}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">${order.total}</p>
+                      <p className="font-semibold">₹{order.total}</p>
                       {order.deliveryPartner && (
                         <p className="text-xs text-muted-foreground">{order.deliveryPartner}</p>
                       )}
