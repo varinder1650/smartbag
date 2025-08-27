@@ -368,7 +368,7 @@ export default function Orders() {
                       return (
                         <TableRow key={order._id || order.id}>
                           <TableCell className="font-medium">#{order.id || 'N/A'}</TableCell>
-                          <TableCell>{order.user || 'Unknown'}</TableCell>
+                          <TableCell>{order.user_name || 'Unknown'}</TableCell>
                           <TableCell>₹{order.total || '0.00'}</TableCell>
                           <TableCell>
                             <StatusBadge status={order.status || 'pending'} />
@@ -436,7 +436,7 @@ export default function Orders() {
 
       {/* Order Details Modal */}
       <Dialog open={showOrderModal} onOpenChange={setShowOrderModal}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Order Details - #{selectedOrder?.id || 'N/A'}</DialogTitle>
             <DialogDescription>
@@ -454,13 +454,14 @@ export default function Orders() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <p><strong>Name:</strong> {selectedOrder.user || 'N/A'}</p>
+                      <p><strong>Name:</strong> {selectedOrder.user_name || 'N/A'}</p>
+                      <p><strong>Email:</strong> {selectedOrder.user_email || 'N/A'}</p>
+                      <p><strong>Phone:</strong> {selectedOrder.user_phone || 'N/A'}</p>
                       <p><strong>Order Date:</strong> {
                         selectedOrder.created_at ? 
                           format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm") : 
                           'N/A'
                       }</p>
-                      <p><strong>Status:</strong> <StatusBadge status={selectedOrder.status || 'pending'} /></p>
                       <p><strong>Total:</strong> ₹{selectedOrder.total || '0.00'}</p>
                     </div>
                   </CardContent>
@@ -472,6 +473,7 @@ export default function Orders() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
+                      <p><strong>Delivery Address:</strong> {selectedOrder.delivery_address['address'] || "Not assigned"}</p>
                       <p><strong>Delivery Partner:</strong> {selectedOrder.deliveryPartner || "Not assigned"}</p>
                       <p><strong>Status:</strong> <StatusBadge status={selectedOrder.status || 'pending'} /></p>
                       
@@ -523,7 +525,7 @@ export default function Orders() {
                                   <div className="flex items-center space-x-3">
                                     {item.image ? (
                                       <img
-                                        src={item.image}
+                                        src={item.product_image[0]}
                                         alt={item.name || 'Product'}
                                         className="h-10 w-10 rounded-lg object-cover"
                                         onError={(e) => {
@@ -536,7 +538,7 @@ export default function Orders() {
                                         <Package className="h-5 w-5 text-muted-foreground" />
                                       </div>
                                     )}
-                                    <span>{item.product || 'Unknown Product'}</span>
+                                    <span>{item.product_name || 'Unknown Product'}</span>
                                   </div>
                                 </TableCell>
                                 <TableCell>₹{item.price || '0.00'}</TableCell>

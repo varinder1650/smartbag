@@ -36,7 +36,19 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
         for order in orders:
             try:
                 # Serialize the order first (handles datetime conversion)
+                user = await db.find_one("users", {"_id":order["user"]})
+                
+                for item in order["items"]:
+                    id = ObjectId(item['product'])
+                    product = await db.find_one("products",{"_id": id})
+                    item["product_name"] = product["name"]
+                    item["product_image"] = product["images"]
+                
                 serialized_order = serialize_document(order)
+                
+                serialized_order["user_name"] = user["name"]
+                serialized_order["user_email"] = user["email"]
+                serialized_order["user_phone"] = user["phone"]
                 
                 # Add frontend-friendly field mappings
                 serialized_order["id"] = serialized_order["_id"]  # Add id field
@@ -51,7 +63,7 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
                 continue
         
         logger.info(f"Sending {len(serialized_orders)} serialized orders")
-        
+
         await websocket.send_json({
             "type": "orders_data",
             "channel": "orders", 

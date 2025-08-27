@@ -272,7 +272,7 @@ export default function Dashboard() {
                         <p className="font-medium">#{order.id}</p>
                         <StatusBadge status={order.status} />
                       </div>
-                      <p className="text-sm text-muted-foreground">{order.user}</p>
+                      <p className="text-sm text-muted-foreground">{order.user_name}</p>
                       <p className="text-xs text-muted-foreground">
                         {order.created_at ? format(new Date(order.created_at), "MMM dd, HH:mm") : 'N/A'}
                       </p>
