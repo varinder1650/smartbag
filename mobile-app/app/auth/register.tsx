@@ -16,7 +16,6 @@ export default function RegisterScreen() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
     password: '',
     confirmPassword: '',
   });
@@ -28,10 +27,7 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    console.log('Register button pressed!');
-    console.log('Form data:', formData);
-    
-    if (!formData.name || !formData.email || !formData.phone || !formData.password || !formData.confirmPassword) {
+    if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -48,17 +44,38 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      const result = await register(formData);
+      console.log('📤 Sending registration data:', {
+        name: formData.name,
+        email: formData.email,
+        password: '[HIDDEN]'
+      });
+
+      const result = await register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      console.log('📥 Registration result:', result);
+
       if (result.success) {
-        Alert.alert('Success', 'Registration successful! Please sign in.', [
-          { text: 'OK', onPress: () => router.replace('/auth/login') }
-        ]);
+        console.log('✅ Registration successful!');
+        console.log('🔍 requires_phone:', result.requires_phone);
+        
+        if (result.requires_phone) {
+          console.log('📱 Redirecting to phone screen...');
+          router.replace('/auth/phone');
+        } else {
+          console.log('🏠 Redirecting to home...');
+          router.replace('/(tabs)');
+        }
       } else {
-        Alert.alert('Registration Failed', result.error || 'Network error. Please check your connection and try again.');
+        console.error('❌ Registration failed:', result.error);
+        Alert.alert('Registration Failed', result.error || 'Something went wrong.');
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+      console.error('💥 Registration error:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -82,7 +99,7 @@ export default function RegisterScreen() {
             onChangeText={(value) => handleInputChange('name', value)}
             autoCapitalize="words"
           />
-          
+
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -91,15 +108,7 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
           />
-          
-          <TextInput
-            style={styles.input}
-            placeholder="Phone Number"
-            value={formData.phone}
-            onChangeText={(value) => handleInputChange('phone', value)}
-            keyboardType="phone-pad"
-          />
-          
+
           <TextInput
             style={styles.input}
             placeholder="Password"
@@ -107,7 +116,7 @@ export default function RegisterScreen() {
             onChangeText={(value) => handleInputChange('password', value)}
             secureTextEntry
           />
-          
+
           <TextInput
             style={styles.input}
             placeholder="Confirm Password"
@@ -115,7 +124,7 @@ export default function RegisterScreen() {
             onChangeText={(value) => handleInputChange('confirmPassword', value)}
             secureTextEntry
           />
-          
+
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleRegister}
@@ -203,4 +212,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-}); 
+});
