@@ -1,102 +1,214 @@
-from fastapi import APIRouter, Query, HTTPException, status
-from pydantic import BaseModel
+from bson import ObjectId
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 import logging
-from typing import Optional, List
+from typing import List
+from datetime import datetime
+from app.utils.auth import get_current_user
+from db.db_manager import DatabaseManager, get_database
+from schema.address import AddressCreate, AddressUpdate, AddressResponse,GeocodeRequest,ReverseGeocodeRequest
+from app.utils.mongo import fix_mongo_types
+from typing import List
 import os
 from dotenv import load_dotenv
 import httpx
-
-# Load environment variables
-load_dotenv()
+from app.utils.address import get_fallback_address,get_fallback_coordinates,get_fallback_predictions
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Get API key directly from environment
+MAX_ADDRESSES_PER_USER = 5
+
+load_dotenv()
+
 OLA_KRUTRIM_API_KEY = os.getenv('OLA_KRUTRIM_API_KEY')
 
-class GeocodeRequest(BaseModel):
-    address: str
+@router.post("/", response_model=AddressResponse)
+async def create_address(
+    address_data: AddressCreate,
+    current_user=Depends(get_current_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    """Create a new address for the user"""
+    try:
+        # Check address limit
+        user_addresses_count = await db.count_documents("user_addresses", {
+            "user_id": ObjectId(current_user.id)
+        })
+        
+        if user_addresses_count >= MAX_ADDRESSES_PER_USER:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Maximum {MAX_ADDRESSES_PER_USER} addresses allowed. Please delete an existing address first."
+            )
+        
+        # Check if user already has an address with this label
+        existing_address = await db.find_one("user_addresses", {
+            "user_id": ObjectId(current_user.id),
+            "label": address_data.label
+        })
+        
+        if existing_address:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Address with label '{address_data.label}' already exists"
+            )
+        
+        # Check if this is the first address for the user
+        is_default = user_addresses_count == 0  # First address becomes default
+        
+        address_doc = address_data.dict()
+        address_doc["user_id"] = ObjectId(current_user.id)
+        address_doc["is_default"] = is_default
+        address_doc["created_at"] = datetime.utcnow()
+        address_doc["updated_at"] = datetime.utcnow()
+        
+        address_id = await db.insert_one("user_addresses", address_doc)
+        
+        # Get the created address
+        created_address = await db.find_one("user_addresses", {"_id": ObjectId(address_id)})
+        fixed_address = fix_mongo_types(created_address)
+        
+        logger.info(f"Address created successfully for user {current_user.email}")
+        return AddressResponse(**fixed_address)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create address error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create address"
+        )
 
-class ReverseGeocodeRequest(BaseModel):
-    latitude: float
-    longitude: float
+@router.get("/my", response_model=List[AddressResponse])
+async def get_user_addresses(
+    current_user=Depends(get_current_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    """Get all addresses for the user"""
+    try:
+        addresses = await db.find_many(
+            "user_addresses",
+            {"user_id": ObjectId(current_user.id)},
+            sort=[("is_default", -1), ("created_at", -1)]  # Default first, then by creation date
+        )
+        
+        fixed_addresses = [fix_mongo_types(address) for address in addresses]
+        return [AddressResponse(**address) for address in fixed_addresses]
+        
+    except Exception as e:
+        logger.error(f"Get addresses error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get addresses"
+        )
 
-# Define CITIES dictionary (it was missing in your code)
-CITIES = {
-    'mumbai': {'latitude': 19.0760, 'longitude': 72.8777, 'state': 'Maharashtra'},
-    'delhi': {'latitude': 28.7041, 'longitude': 77.1025, 'state': 'Delhi'},
-    'bangalore': {'latitude': 12.9716, 'longitude': 77.5946, 'state': 'Karnataka'},
-    'bengaluru': {'latitude': 12.9716, 'longitude': 77.5946, 'state': 'Karnataka'},
-    'chennai': {'latitude': 13.0827, 'longitude': 80.2707, 'state': 'Tamil Nadu'},
-    'kolkata': {'latitude': 22.5726, 'longitude': 88.3639, 'state': 'West Bengal'},
-    'pune': {'latitude': 18.5204, 'longitude': 73.8567, 'state': 'Maharashtra'},
-    'hyderabad': {'latitude': 17.3850, 'longitude': 78.4867, 'state': 'Telangana'},
-    'ahmedabad': {'latitude': 23.0225, 'longitude': 72.5714, 'state': 'Gujarat'},
-    'jaipur': {'latitude': 26.9124, 'longitude': 75.7873, 'state': 'Rajasthan'},
-    'lucknow': {'latitude': 26.8467, 'longitude': 80.9462, 'state': 'Uttar Pradesh'},
-    'kanpur': {'latitude': 26.4499, 'longitude': 80.3319, 'state': 'Uttar Pradesh'},
-    'nagpur': {'latitude': 21.1458, 'longitude': 79.0882, 'state': 'Maharashtra'},
-    'indore': {'latitude': 22.7196, 'longitude': 75.8577, 'state': 'Madhya Pradesh'},
-    'thane': {'latitude': 19.2183, 'longitude': 72.9781, 'state': 'Maharashtra'},
-    'bhopal': {'latitude': 23.2599, 'longitude': 77.4126, 'state': 'Madhya Pradesh'},
-    'visakhapatnam': {'latitude': 17.6868, 'longitude': 83.2185, 'state': 'Andhra Pradesh'},
-    'patna': {'latitude': 25.5941, 'longitude': 85.1376, 'state': 'Bihar'},
-    'vadodara': {'latitude': 22.3072, 'longitude': 73.1812, 'state': 'Gujarat'},
-    'ghaziabad': {'latitude': 28.6692, 'longitude': 77.4538, 'state': 'Uttar Pradesh'},
-    'ludhiana': {'latitude': 30.9010, 'longitude': 75.8573, 'state': 'Punjab'},
-    'agra': {'latitude': 27.1767, 'longitude': 78.0081, 'state': 'Uttar Pradesh'},
-    'nashik': {'latitude': 19.9975, 'longitude': 73.7898, 'state': 'Maharashtra'},
-    'faridabad': {'latitude': 28.4089, 'longitude': 77.3178, 'state': 'Haryana'},
-    'meerut': {'latitude': 28.9845, 'longitude': 77.7064, 'state': 'Uttar Pradesh'},
-    'rajkot': {'latitude': 22.3039, 'longitude': 70.8022, 'state': 'Gujarat'},
-    'kalyan': {'latitude': 19.2437, 'longitude': 73.1355, 'state': 'Maharashtra'},
-    'vasai': {'latitude': 19.4883, 'longitude': 72.8056, 'state': 'Maharashtra'},
-    'varanasi': {'latitude': 25.3176, 'longitude': 82.9739, 'state': 'Uttar Pradesh'},
-    'san francisco': {'latitude': 37.7749, 'longitude': -122.4194, 'state': 'California'},
-}
+@router.post("/{address_id}/set-default")
+async def set_default_address(
+    address_id: str,
+    current_user=Depends(get_current_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    """Set an address as the default"""
+    try:
+        if not ObjectId.is_valid(address_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid address ID"
+            )
+        
+        # Check if address belongs to user
+        existing_address = await db.find_one("user_addresses", {
+            "_id": ObjectId(address_id),
+            "user_id": ObjectId(current_user.id)
+        })
+        
+        if not existing_address:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Address not found"
+            )
+        
+        # Remove default from all user addresses
+        await db.update_many(
+            "user_addresses",
+            {"user_id": ObjectId(current_user.id)},
+            {"$set": {"is_default": False, "updated_at": datetime.utcnow()}}
+        )
+        
+        # Set this address as default
+        await db.update_one(
+            "user_addresses",
+            {"_id": ObjectId(address_id)},
+            {"$set": {"is_default": True, "updated_at": datetime.utcnow()}}
+        )
+        
+        logger.info(f"Address {address_id} set as default")
+        return {"message": "Default address updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Set default address error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to set default address"
+        )
 
-def get_fallback_predictions(query: str):
-    """Generate fallback predictions when Ola API fails"""
-    query_lower = query.lower()
-    predictions = []
-    
-    # Search through cities for matches
-    for city, data in CITIES.items():
-        if query_lower in city or city in query_lower:
-            predictions.append({
-                "place_id": f"city_{city}",
-                "description": f"{city.title()}, {data['state']}, India",
-                "structured_formatting": {
-                    "main_text": city.title(),
-                    "secondary_text": f"{data['state']}, India"
-                }
+@router.delete("/{address_id}")
+async def delete_address(
+    address_id: str,
+    current_user=Depends(get_current_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    """Delete an address"""
+    try:
+        if not ObjectId.is_valid(address_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid address ID"
+            )
+        
+        # Check if address belongs to user
+        existing_address = await db.find_one("user_addresses", {
+            "_id": ObjectId(address_id),
+            "user_id": ObjectId(current_user.id)
+        })
+        
+        if not existing_address:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Address not found"
+            )
+        
+        # If deleting default address, make another address default
+        if existing_address.get("is_default"):
+            other_address = await db.find_one("user_addresses", {
+                "user_id": ObjectId(current_user.id),
+                "_id": {"$ne": ObjectId(address_id)}
             })
-    
-    # If no exact matches, try partial matches
-    if not predictions:
-        for city, data in CITIES.items():
-            if any(part in city for part in query_lower.split() if len(part) > 2):
-                predictions.append({
-                    "place_id": f"partial_{city}",
-                    "description": f"{city.title()}, {data['state']}, India (Similar)",
-                    "structured_formatting": {
-                        "main_text": city.title(),
-                        "secondary_text": f"{data['state']}, India - Similar match"
-                    }
-                })
-    
-    # Always add manual entry
-    predictions.append({
-        "place_id": "manual",
-        "description": query,
-        "structured_formatting": {
-            "main_text": query,
-            "secondary_text": "Enter this address manually"
-        }
-    })
-    
-    return predictions[:6]
+            
+            if other_address:
+                await db.update_one(
+                    "user_addresses",
+                    {"_id": other_address["_id"]},
+                    {"$set": {"is_default": True, "updated_at": datetime.utcnow()}}
+                )
+        
+        # Delete the address
+        await db.delete_one("user_addresses", {"_id": ObjectId(address_id)})
+        
+        logger.info(f"Address {address_id} deleted successfully")
+        return {"message": "Address deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete address error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete address"
+        )
 
 @router.get("/search-addresses")
 async def search_addresses(query: str = Query(..., description="Address search query")):
@@ -247,29 +359,6 @@ async def geocode_address(request: GeocodeRequest):
         logger.error(f"❌ Geocoding error: {e}")
         return get_fallback_coordinates(request.address)
 
-def get_fallback_coordinates(address: str):
-    """Get fallback coordinates from local city database"""
-    address_lower = address.lower()
-    
-    # Find city in address
-    for city, data in CITIES.items():
-        if city in address_lower:
-            logger.info(f"✅ Found fallback coordinates for {city}")
-            return {
-                "latitude": data['latitude'],
-                "longitude": data['longitude'],
-                "formattedAddress": address,
-                "note": f"Approximate coordinates for {city.title()}"
-            }
-    
-    logger.info(f"❌ No coordinates found for: {address}")
-    return {
-        "latitude": None,
-        "longitude": None,
-        "formattedAddress": address,
-        "note": "No coordinates available"
-    }
-
 @router.post("/reverse-geocode")
 async def reverse_geocode(request: ReverseGeocodeRequest):
     """Convert coordinates to address using Ola Maps API with fallback"""
@@ -343,65 +432,3 @@ async def reverse_geocode(request: ReverseGeocodeRequest):
     except Exception as e:
         logger.error(f"❌ Reverse geocoding error: {e}")
         return get_fallback_address(request.latitude, request.longitude)
-
-def get_fallback_address(latitude: float, longitude: float):
-    """Get fallback address from nearest city"""
-    # Find nearest city
-    min_distance = float('inf')
-    nearest_city = None
-    nearest_data = None
-    
-    for city, data in CITIES.items():
-        distance = ((latitude - data['latitude']) ** 2 + 
-                   (longitude - data['longitude']) ** 2) ** 0.5
-        
-        if distance < min_distance:
-            min_distance = distance
-            nearest_city = city
-            nearest_data = data
-    
-    if nearest_city and min_distance < 1.0:  # Within ~111km
-        formatted_address = f"Near {nearest_city.title()}, {nearest_data['state']}, India"
-        logger.info(f"✅ Found nearest city: {nearest_city}")
-        return {
-            "formattedAddress": formatted_address,
-            "city": nearest_city.title(),
-            "state": nearest_data['state'],
-            "country": "India"
-        }
-    else:
-        formatted_address = f"Location at {latitude:.4f}, {longitude:.4f}"
-        logger.info(f"❌ No nearby city found")
-        return {
-            "formattedAddress": formatted_address,
-            "city": "Unknown",
-            "state": "Unknown",
-            "country": "India"
-        }
-
-@router.get("/health")
-async def address_health():
-    """Health check for address service"""
-    return {
-        "status": "healthy",
-        "service": "address-api",
-        "cities_available": len(CITIES),
-        "ola_krutrim_configured": bool(OLA_KRUTRIM_API_KEY),
-        "ola_krutrim_key_length": len(OLA_KRUTRIM_API_KEY) if OLA_KRUTRIM_API_KEY else 0,
-        "endpoints": [
-            "/search-addresses", 
-            "/geocode", 
-            "/reverse-geocode"
-        ]
-    }
-
-# Test endpoint to verify the router is working
-@router.get("/test")
-async def test_endpoint():
-    """Simple test endpoint"""
-    return {
-        "message": "Address routes are working!",
-        "timestamp": "2025-08-20",
-        "cities_loaded": len(CITIES),
-        "ola_api_configured": bool(OLA_KRUTRIM_API_KEY)
-    }

@@ -118,7 +118,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   SETTINGS: joinApiUrl(API_BASE_URL, 'settings/public'),
 
   // User & Address Services - Fixed the paths
-  USER_ADDRESS: joinApiUrl(API_BASE_URL, 'user/address'),
+  USER_ADDRESS: joinApiUrl(API_BASE_URL, 'address'),
   SEARCH_ADDRESSES: joinApiUrl(API_BASE_URL, 'address/search-addresses'),
   GEOCODE: joinApiUrl(API_BASE_URL, 'geocode'), 
   REVERSE_GEOCODE: joinApiUrl(API_BASE_URL, 'reverse-geocode'),
