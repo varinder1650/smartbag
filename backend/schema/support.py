@@ -30,7 +30,7 @@ class SupportTicketCreate(BaseModel):
     category: SupportCategory
     subject: str = Field(..., min_length=5, max_length=200)
     message: str = Field(..., min_length=10, max_length=2000)
-    order_id: Optional[str] = None  # For order-related queries
+    order_id: Optional[str] = None
 
 class SupportTicketResponse(BaseModel):
     id: str = Field(..., alias="_id")

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.middleware.setup import setup_middleware
 from db.config import settings
-from app.routes import categories, products, orders, auth, cart, brands, settings as settings_route,address
+from app.routes import categories, products, orders, auth, cart, brands, settings as settings_route,address,support
 from datetime import datetime
 
 def create_customer_app() -> FastAPI:
@@ -22,6 +22,7 @@ def create_customer_app() -> FastAPI:
     app.include_router(cart.router, prefix="/cart", tags=["Cart"])
     app.include_router(settings_route.router, prefix="/settings", tags=["Settings"])  # Add this
     app.include_router(address.router, prefix="/address", tags=["Address"])
+    app.include_router(support.router, prefix = "/support", tags=["Support"])
 
     @app.get("/")
     async def root():

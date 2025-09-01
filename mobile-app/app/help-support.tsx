@@ -11,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  FlatList,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +24,16 @@ interface SupportCategory {
   value: string;
   label: string;
   description: string;
+}
+
+interface SupportTicket {
+  _id: string;
+  category: string;
+  subject: string;
+  message: string;
+  status: string;
+  created_at: string;
+  admin_response?: string;
 }
 
 const SUPPORT_CATEGORIES: SupportCategory[] = [
@@ -37,12 +49,94 @@ const SUPPORT_CATEGORIES: SupportCategory[] = [
 
 export default function HelpSupportScreen() {
   const { token, user } = useAuth();
+  
+  // Tickets list state
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Create form state
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [orderId, setOrderId] = useState('');
   const [loading, setLoading] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+  // Fetch user's support tickets
+  const fetchTickets = async () => {
+    if (!token) return;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}support/tickets`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTickets(data);
+      } else {
+        console.error('Failed to fetch tickets');
+      }
+    } catch (error) {
+      console.error('Error fetching tickets:', error);
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchTickets();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchTickets();
+  }, []);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'open': return '#FF9500';
+      case 'in_progress': return '#007AFF';
+      case 'resolved': return '#34C759';
+      case 'closed': return '#8E8E93';
+      default: return '#8E8E93';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'open': return 'Open';
+      case 'in_progress': return 'In Progress';
+      case 'resolved': return 'Resolved';
+      case 'closed': return 'Closed';
+      default: return status;
+    }
+  };
+
+  const getCategoryLabel = (category: string) => {
+    const categoryData = SUPPORT_CATEGORIES.find(cat => cat.value === category);
+    return categoryData ? categoryData.label : category;
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
 
   const handleSubmit = async () => {
     if (!selectedCategory) {
@@ -69,7 +163,7 @@ export default function HelpSupportScreen() {
         order_id: orderId.trim() || null,
       };
 
-      const response = await fetch(`${API_BASE_URL}/support/tickets`, {
+      const response = await fetch(`${API_BASE_URL}support/tickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,7 +187,9 @@ export default function HelpSupportScreen() {
                 setSubject('');
                 setMessage('');
                 setOrderId('');
-                router.back();
+                setShowCreateForm(false);
+                // Refresh tickets to show new one
+                fetchTickets();
               }
             }
           ]
@@ -108,6 +204,35 @@ export default function HelpSupportScreen() {
       setLoading(false);
     }
   };
+
+  // NEW: Render individual ticket card
+  const renderTicket = ({ item }: { item: SupportTicket }) => (
+    <View style={styles.ticketCard}>
+      <View style={styles.ticketHeader}>
+        <View style={styles.ticketInfo}>
+          <Text style={styles.ticketSubject} numberOfLines={1}>{item.subject}</Text>
+          <Text style={styles.ticketCategory}>{getCategoryLabel(item.category)}</Text>
+          <Text style={styles.ticketDate}>{formatDate(item.created_at)}</Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+        </View>
+      </View>
+      
+      <Text style={styles.ticketMessage} numberOfLines={2}>
+        {item.message}
+      </Text>
+      
+      {item.admin_response && (
+        <View style={styles.adminResponse}>
+          <Text style={styles.adminResponseLabel}>Admin Response:</Text>
+          <Text style={styles.adminResponseText} numberOfLines={2}>
+            {item.admin_response}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
 
   const renderCategorySelector = () => {
     const selectedCategoryData = SUPPORT_CATEGORIES.find(cat => cat.value === selectedCategory);
@@ -178,108 +303,159 @@ export default function HelpSupportScreen() {
     </Modal>
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
+  // NEW: Form moved to modal
+  const renderCreateForm = () => (
+    <Modal
+      visible={showCreateForm}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowCreateForm(false)}
+    >
       <KeyboardAvoidingView
-        style={styles.container}
+        style={styles.createFormContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#333" />
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={() => setShowCreateForm(false)}>
+            <Text style={styles.modalCancelText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Help & Support</Text>
+          <Text style={styles.modalTitle}>Create Support Ticket</Text>
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.formContainer}>
-            <Text style={styles.formTitle}>Submit a Support Request</Text>
-            <Text style={styles.formSubtitle}>
-              Tell us how we can help you. We'll get back to you as soon as possible.
-            </Text>
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.formSubtitle}>
+            Tell us how we can help you. We'll get back to you as soon as possible.
+          </Text>
 
-            {/* Category Selector */}
-            {renderCategorySelector()}
+          {renderCategorySelector()}
 
-            {/* Subject Input */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Subject *</Text>
+            <TextInput
+              style={styles.input}
+              value={subject}
+              onChangeText={setSubject}
+              placeholder="Brief description of your issue"
+              maxLength={200}
+              returnKeyType="next"
+            />
+          </View>
+
+          {(selectedCategory === 'order_inquiry' || selectedCategory === 'delivery_issue') && (
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Subject *</Text>
+              <Text style={styles.inputLabel}>Order ID (Optional)</Text>
               <TextInput
                 style={styles.input}
-                value={subject}
-                onChangeText={setSubject}
-                placeholder="Brief description of your issue"
-                maxLength={200}
-                returnKeyType="next"
+                value={orderId}
+                onChangeText={setOrderId}
+                placeholder="Enter your order ID if applicable"
+                autoCapitalize="none"
               />
             </View>
+          )}
 
-            {/* Order ID Input (conditional) */}
-            {(selectedCategory === 'order_inquiry' || selectedCategory === 'delivery_issue') && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Order ID (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={orderId}
-                  onChangeText={setOrderId}
-                  placeholder="Enter your order ID if applicable"
-                  autoCapitalize="none"
-                />
-              </View>
-            )}
-
-            {/* Message Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Message *</Text>
-              <TextInput
-                style={styles.textArea}
-                value={message}
-                onChangeText={setMessage}
-                placeholder="Please describe your issue or question in detail..."
-                multiline
-                numberOfLines={6}
-                textAlignVertical="top"
-                maxLength={2000}
-              />
-              <Text style={styles.charCount}>{message.length}/2000</Text>
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitButtonText}>Submit Support Request</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Contact Info */}
-            <View style={styles.contactSection}>
-              <Text style={styles.contactTitle}>Other ways to reach us:</Text>
-              <View style={styles.contactItem}>
-                <Ionicons name="mail-outline" size={20} color="#666" />
-                <Text style={styles.contactText}>support@smartbag.com</Text>
-              </View>
-              <View style={styles.contactItem}>
-                <Ionicons name="call-outline" size={20} color="#666" />
-                <Text style={styles.contactText}>+91 1234567890</Text>
-              </View>
-              <View style={styles.contactItem}>
-                <Ionicons name="time-outline" size={20} color="#666" />
-                <Text style={styles.contactText}>Mon-Fri, 9 AM - 6 PM</Text>
-              </View>
-            </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Message *</Text>
+            <TextInput
+              style={styles.textArea}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Please describe your issue or question in detail..."
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              maxLength={2000}
+            />
+            <Text style={styles.charCount}>{message.length}/2000</Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitButtonText}>Submit Support Request</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
 
         {renderCategoryModal()}
       </KeyboardAvoidingView>
+    </Modal>
+  );
+
+  // MAIN RETURN - NEW STRUCTURE
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Help & Support</Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      {/* Tickets List - THIS IS THE NEW MAIN CONTENT */}
+      {loadingTickets ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Loading your tickets...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={tickets}
+          renderItem={renderTicket}
+          keyExtractor={(item) => item._id}
+          style={styles.ticketsList}
+          contentContainerStyle={styles.ticketsListContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="help-circle-outline" size={64} color="#ccc" />
+              <Text style={styles.emptyTitle}>No Support Tickets</Text>
+              <Text style={styles.emptySubtitle}>
+                You haven't created any support tickets yet. Tap the + button to create your first ticket.
+              </Text>
+              
+              {/* Contact Info in Empty State */}
+              <View style={styles.contactSection}>
+                <Text style={styles.contactTitle}>Other ways to reach us:</Text>
+                <View style={styles.contactItem}>
+                  <Ionicons name="mail-outline" size={20} color="#666" />
+                  <Text style={styles.contactText}>support@smartbag.com</Text>
+                </View>
+                <View style={styles.contactItem}>
+                  <Ionicons name="call-outline" size={20} color="#666" />
+                  <Text style={styles.contactText}>+91 1234567890</Text>
+                </View>
+                <View style={styles.contactItem}>
+                  <Ionicons name="time-outline" size={20} color="#666" />
+                  <Text style={styles.contactText}>Mon-Fri, 9 AM - 6 PM</Text>
+                </View>
+              </View>
+            </View>
+          }
+        />
+      )}
+
+      {/* Floating Create Button - THIS IS THE NEW CREATE BUTTON */}
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={() => setShowCreateForm(true)}
+      >
+        <Ionicons name="add" size={24} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Create Form Modal - THIS IS WHERE THE FORM MOVED */}
+      {renderCreateForm()}
     </SafeAreaView>
   );
 }
@@ -310,17 +486,167 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  content: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 16,
+  },
+  // NEW: Tickets list styles
+  ticketsList: {
     flex: 1,
   },
-  formContainer: {
+  ticketsListContent: {
     padding: 16,
+    paddingBottom: 100, // Space for floating button
   },
-  formTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  ticketCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ticketHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  ticketInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  ticketSubject: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#333',
+    marginBottom: 4,
+  },
+  ticketCategory: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  ticketDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  ticketMessage: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 18,
     marginBottom: 8,
+  },
+  adminResponse: {
+    backgroundColor: '#f0f8ff',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+  },
+  adminResponseLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginBottom: 4,
+  },
+  adminResponseText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 18,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  // NEW: Floating create button
+  createButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  // NEW: Create form modal styles
+  createFormContainer: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#007AFF',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
   },
   formSubtitle: {
     fontSize: 16,
@@ -352,9 +678,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  placeholder: {
-    color: '#999',
-  },
   inputGroup: {
     marginBottom: 16,
   },
@@ -382,6 +705,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     minHeight: 120,
+    textAlignVertical: 'top',
   },
   charCount: {
     fontSize: 12,
@@ -427,31 +751,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginLeft: 12,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  modalCancelText: {
-    fontSize: 16,
-    color: '#007AFF',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  modalContent: {
-    flex: 1,
   },
   categoryOption: {
     flexDirection: 'row',

@@ -253,7 +253,7 @@ const HomeScreen = () => {
     }
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+      const response = await fetch(`${API_BASE_URL}auth/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

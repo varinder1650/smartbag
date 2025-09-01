@@ -20,8 +20,9 @@ async def create_support_ticket(
     current_user=Depends(get_current_user),
     db: DatabaseManager = Depends(get_database)
 ):
-    """Create a new support ticket"""
+    print(ticket_data)
     try:
+        print(ticket_data)
         ticket_doc = ticket_data.dict()
         ticket_doc["user_id"] = ObjectId(current_user.id)
         ticket_doc["user_name"] = current_user.name
