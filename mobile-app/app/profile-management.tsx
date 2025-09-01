@@ -104,7 +104,7 @@ export default function ProfileManagementScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Address Information</Text>
           <Text style={styles.sectionSubtitle}>
             Address is required for placing orders
@@ -154,7 +154,7 @@ export default function ProfileManagementScreen() {
               keyboardType="numeric"
             />
           </View>
-        </View>
+        </View> */}
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}

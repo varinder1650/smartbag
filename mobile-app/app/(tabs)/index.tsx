@@ -20,6 +20,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
 import { useAuth } from '../../contexts/AuthContext';
 
+import { RequestProductSection } from '../../components/RequestProductSection';
+
 const { width } = Dimensions.get('window');
 
 interface ProductImage {
@@ -906,7 +908,15 @@ const HomeScreen = () => {
           data={categories}
           renderItem={renderCategorySection}
           keyExtractor={(item, index) => `category-section-${item._id}-${index}`}
-          ListFooterComponent={() => <View style={{ height: 100 }} />}
+          // ListFooterComponent={() => <View style={{ height: 100 }} />}
+          ListFooterComponent={() => (
+            <View>
+              <RequestProductSection onRequestSubmitted={() => {
+                Alert.alert('Thank you!', 'Your product request has been submitted.');
+              }} />
+              <View style={{ height: 100 }} />
+            </View>
+          )}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', marginTop: 32 }}>
               <Text style={{ color: '#888', fontSize: 16 }}>No categories found.</Text>

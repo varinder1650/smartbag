@@ -70,7 +70,11 @@ export default function ProfileScreen() {
   };
 
   const handleHelpSupport = () => {
-    Alert.alert('Help & Support', 'For support, please contact us at support@example.com');
+    try {
+      router.push('/help-support');
+    } catch (error) {
+      Alert.alert('Error', 'Unable to navigate to help & support');
+    }
   };
 
   return (
@@ -104,7 +108,7 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={24} color="#ccc" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={handlePaymentMethods}>
+        {/* <TouchableOpacity style={styles.menuItem} onPress={handlePaymentMethods}>
           <Ionicons name="card-outline" size={24} color="#333" />
           <Text style={styles.menuText}>Payment Methods</Text>
           <Ionicons name="chevron-forward" size={24} color="#ccc" />
@@ -114,7 +118,7 @@ export default function ProfileScreen() {
           <Ionicons name="notifications-outline" size={24} color="#333" />
           <Text style={styles.menuText}>Notifications</Text>
           <Ionicons name="chevron-forward" size={24} color="#ccc" />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         <TouchableOpacity style={styles.menuItem} onPress={handleHelpSupport}>
           <Ionicons name="help-circle-outline" size={24} color="#333" />
