@@ -11,16 +11,19 @@ import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 // Type definitions
 interface User {
   _id: string;
+  id?: string; // Add id for compatibility
   name: string;
   email: string;
-  phone: string;
-  role: 'customer' | 'delivery_partner' | 'admin';
+  phone?: string; // Make phone optional
+  role: 'customer' | 'delivery_partner' | 'admin' | 'user';
   address?: string;
   city?: string;
   state?: string;
   pincode?: string;
-  googleId?: string; // Add Google ID for Google users
-  profilePicture?: string; // Add profile picture from Google
+  googleId?: string;
+  profilePicture?: string;
+  provider?: string;
+  is_active?: boolean;
 }
 
 interface AuthContextType {
@@ -29,8 +32,9 @@ interface AuthContextType {
   loading: boolean;
   apiUrl: string;
   login: (email: string, password: string) => Promise<LoginResult>;
-  googleLogin: (googleToken: string, userInfo: any) => Promise<LoginResult>; // Add Google login method
+  googleLogin: (googleData: any) => Promise<LoginResult>; // Updated signature
   register: (userData: RegisterData) => Promise<RegisterResult>;
+  updatePhone: (phone: string) => Promise<UpdatePhoneResult>; // Add updatePhone
   logout: () => Promise<void>;
   updateProfile: (updatedData: UpdateProfileData) => Promise<UpdateProfileResult>;
   refreshToken: () => Promise<boolean>;
@@ -39,24 +43,33 @@ interface AuthContextType {
 interface LoginResult {
   success: boolean;
   error?: string;
+  requires_phone?: boolean; // Add this for phone flow
 }
 
 interface RegisterData {
   name: string;
   email: string;
-  phone: string;
+  phone?: string; // Make optional
   password: string;
-  confirmPassword: string;
+  confirmPassword?: string; // Make optional
 }
 
 interface RegisterResult {
   success: boolean;
   error?: string;
   message?: string;
+  requires_phone?: boolean; // Add this for phone flow
+}
+
+interface UpdatePhoneResult {
+  success: boolean;
+  error?: string;
+  user?: User;
 }
 
 interface UpdateProfileData {
   name?: string;
+  phone?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -119,19 +132,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const loadStoredAuth = async (): Promise<void> => {
     try {
+      console.log('Loading stored auth...');
       const [storedToken, storedUser, storedRefreshToken] = await Promise.all([
-        AsyncStorage.getItem('token'),
-        AsyncStorage.getItem('user'),
-        AsyncStorage.getItem('refreshToken'),
+        AsyncStorage.getItem('access_token'), // Updated key to match backend
+        AsyncStorage.getItem('user_data'), // Updated key
+        AsyncStorage.getItem('refresh_token'), // Updated key
       ]);
       
       if (storedToken && storedUser) {
+        console.log('Found stored auth, setting user and token');
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
         setRefreshTokenState(storedRefreshToken);
         
         // Check if token is still valid
         await validateToken(storedToken);
+      } else {
+        console.log('No stored auth found');
       }
     } catch (error) {
       console.error('Error loading stored auth:', error);
@@ -163,6 +180,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
+      console.log('Attempting login for:', email);
       const response = await fetchWithTimeout(
         createApiUrl('auth/login'),
         {
@@ -176,9 +194,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       );
 
       const data = await response.json();
+      console.log('Login response:', data);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
+        throw new Error(data.detail || data.message || 'Login failed');
       }
 
       // Store tokens
@@ -186,17 +205,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setRefreshTokenState(data.refresh_token);
       setUser(data.user);
 
-      // Save to AsyncStorage
+      // Save to AsyncStorage with updated keys
       await Promise.all([
-        AsyncStorage.setItem('token', data.access_token),
-        AsyncStorage.setItem('user', JSON.stringify(data.user)),
-        data.refresh_token ? AsyncStorage.setItem('refreshToken', data.refresh_token) : Promise.resolve(),
+        AsyncStorage.setItem('access_token', data.access_token),
+        AsyncStorage.setItem('user_data', JSON.stringify(data.user)),
+        data.refresh_token ? AsyncStorage.setItem('refresh_token', data.refresh_token) : Promise.resolve(),
       ]);
       
-      return { success: true };
+      return { 
+        success: true,
+        requires_phone: data.requires_phone || false
+      };
     } catch (error) {
       console.error('Login error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const register = async (userData: RegisterData): Promise<RegisterResult> => {
+    try {
+      console.log('Attempting registration for:', userData.email);
+      const response = await fetch(createApiUrl('auth/register'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await response.json();
+      console.log('Registration response status:', response.status);
+      console.log('Registration response data:', data);
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.message || 'Registration failed');
+      }
+
+      // Store tokens if registration includes login
+      if (data.access_token) {
+        setToken(data.access_token);
+        setRefreshTokenState(data.refresh_token);
+        setUser(data.user);
+
+        await Promise.all([
+          AsyncStorage.setItem('access_token', data.access_token),
+          AsyncStorage.setItem('user_data', JSON.stringify(data.user)),
+          data.refresh_token ? AsyncStorage.setItem('refresh_token', data.refresh_token) : Promise.resolve(),
+        ]);
+      }
+
+      return { 
+        success: true, 
+        message: data.message || 'Registration successful',
+        requires_phone: data.requires_phone !== false // Default to true if missing
+      };
+    } catch (error) {
+      console.error('Registration error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
       return { success: false, error: errorMessage };
     }
   };
@@ -249,40 +315,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (userData: RegisterData): Promise<RegisterResult> => {
+  const updatePhone = async (phone: string): Promise<UpdatePhoneResult> => {
     try {
-      const response = await fetch(API_ENDPOINTS.REGISTER, {
+      console.log('Updating phone number:', phone);
+      console.log('Using token:', token ? 'Present' : 'Missing');
+      
+      if (!token) {
+        return { success: false, error: 'Not authenticated. Please login again.' };
+      }
+      
+      const response = await fetch(createApiUrl('auth/phone'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({ phone }),
       });
 
       const data = await response.json();
+      console.log('Phone update response:', response.status, data);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
+        if (response.status === 401) {
+          // Token expired, logout user
+          await logout();
+          return { success: false, error: 'Session expired. Please login again.' };
+        }
+        throw new Error(data.detail || data.message || 'Failed to update phone number');
       }
 
-      return { success: true, message: data.message };
+      // Update user data
+      const updatedUser = data.user || { ...user, phone };
+      setUser(updatedUser);
+      
+      // Update stored user data
+      await AsyncStorage.setItem('user_data', JSON.stringify(updatedUser));
+      
+      return { success: true, user: updatedUser };
     } catch (error) {
-      console.error('Registration error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      console.error('Phone update error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
       return { success: false, error: errorMessage };
     }
   };
 
   const logout = async (): Promise<void> => {
     try {
+      console.log('Logging out...');
       setToken(null);
       setUser(null);
       setRefreshTokenState(null);
       await Promise.all([
-        AsyncStorage.removeItem('token'),
-        AsyncStorage.removeItem('user'),
-        AsyncStorage.removeItem('refreshToken'),
+        AsyncStorage.removeItem('access_token'),
+        AsyncStorage.removeItem('user_data'),
+        AsyncStorage.removeItem('refresh_token'),
       ]);
+      console.log('Logout completed');
     } catch (error) {
       console.error('Error during logout:', error);
     }
@@ -302,11 +391,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Profile update failed');
+        throw new Error(data.detail || data.message || 'Profile update failed');
       }
 
       setUser(data.user);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
 
       return { success: true, user: data.user };
     } catch (error) {
@@ -345,8 +434,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Save new tokens
       await Promise.all([
-        AsyncStorage.setItem('token', data.access_token),
-        data.refresh_token ? AsyncStorage.setItem('refreshToken', data.refresh_token) : Promise.resolve(),
+        AsyncStorage.setItem('access_token', data.access_token),
+        data.refresh_token ? AsyncStorage.setItem('refresh_token', data.refresh_token) : Promise.resolve(),
       ]);
 
       console.log('Token refreshed successfully');
@@ -365,8 +454,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     apiUrl: API_BASE_URL,
     login,
-    googleLogin, // Add Google login to context
+    googleLogin,
     register,
+    updatePhone, // Add updatePhone to context
     logout,
     updateProfile,
     refreshToken: handleTokenRefresh,

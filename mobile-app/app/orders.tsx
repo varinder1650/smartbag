@@ -18,10 +18,10 @@ import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../config/apiConfig
 interface OrderItem {
   product: {
     _id: string;
-    name: string;
+    product_name: string;
     price: number;
-    images: string[];
-    brand: { name: string };
+    // images: string[];
+    // brand: { name: string };
   };
   quantity: number;
   price: number;
@@ -57,6 +57,31 @@ export default function OrdersScreen() {
     fetchOrders();
   }, []);
 
+  // const fetchOrders = async () => {
+  //   if (!token) return;
+    
+  //   try {
+  //     const response = await fetch(API_ENDPOINTS.MY_ORDERS, {
+  //       headers: {
+  //         'Authorization': `Bearer ${token}`,
+  //       },
+  //     });
+      
+  //     if (response.ok) {
+  //       const data = await response.json();
+  //       setOrders(data || []);
+  //       console.log(data)
+  //     } else {
+  //       console.error('Failed to fetch orders');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error fetching orders:', error);
+  //     Alert.alert('Error', 'Failed to load orders');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const fetchOrders = async () => {
     if (!token) return;
     
@@ -70,6 +95,14 @@ export default function OrdersScreen() {
       if (response.ok) {
         const data = await response.json();
         setOrders(data || []);
+        
+        // Better logging to see the actual data structure
+        console.log('Orders count:', data.length);
+        if (data.length > 0) {
+          console.log('First order ID:', data[0]._id);
+          console.log('First order items:', JSON.stringify(data[0].items, null, 2));
+          console.log('Product name in first item:', data[0].items[0]?.product_name);
+        }
       } else {
         console.error('Failed to fetch orders');
       }
@@ -80,7 +113,7 @@ export default function OrdersScreen() {
       setLoading(false);
     }
   };
-
+  
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchOrders();
@@ -140,20 +173,22 @@ export default function OrdersScreen() {
     }
   };
 
-  const renderOrderItem = ({ item }: { item: OrderItem }) => (
-    <View style={styles.orderItemRow}>
-      <View style={styles.orderItemInfo}>
-        <Text style={styles.orderItemName} numberOfLines={2}>
-          {item.product.name}
-        </Text>
-        <Text style={styles.orderItemBrand}>{item.product.brand?.name}</Text>
-        <Text style={styles.orderItemQuantity}>Qty: {item.quantity}</Text>
-      </View>
-      <Text style={styles.orderItemPrice}>₹{item.price}</Text>
-    </View>
-  );
+  // const renderOrderItem = ({ item }: { item: OrderItem }) => (
+  //   <View style={styles.orderItemRow}>
+  //     <View style={styles.orderItemInfo}>
+  //       <Text style={styles.orderItemName} numberOfLines={2}>
+  //         {item.product.name}
+  //       </Text>
+  //       <Text style={styles.orderItemBrand}>{item.product.brand?.name}</Text>
+  //       <Text style={styles.orderItemQuantity}>Qty: {item.quantity}</Text>
+  //     </View>
+  //     <Text style={styles.orderItemPrice}>₹{item.price}</Text>
+  //   </View>
+  // );
 
   const renderOrder = ({ item }: { item: Order }) => {
+    // console.log('Order item data:', item);
+    // console.log('Product name:', orderItem.product_name);
     return (
       <View style={styles.orderCard}>
         <View style={styles.orderHeader}>
@@ -166,21 +201,20 @@ export default function OrdersScreen() {
           </View>
         </View>
 
-        <View style={styles.orderItems}>
+         <View style={styles.orderItems}>
           {(item.items || []).map((orderItem, index) => (
             <View key={index} style={styles.orderItemRow}>
               <View style={styles.orderItemInfo}>
                 <Text style={styles.orderItemName} numberOfLines={2}>
-                  {orderItem.product?.name || 'Product not available'}
+                  {orderItem.product_name || 'Product not available'}
                 </Text>
-                <Text style={styles.orderItemBrand}>{orderItem.product?.brand?.name}</Text>
                 <Text style={styles.orderItemQuantity}>Qty: {orderItem.quantity || 0}</Text>
               </View>
               <Text style={styles.orderItemPrice}>₹{(orderItem.price || 0).toFixed(2)}</Text>
             </View>
           ))}
         </View>
-
+      
         <View style={styles.orderFooter}>
           <View style={styles.deliveryInfo}>
             <Ionicons name="location-outline" size={16} color="#666" />

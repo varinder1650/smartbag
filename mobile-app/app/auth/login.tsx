@@ -188,7 +188,7 @@ export default function LoginScreen() {
           <View style={styles.form}>
             <TextInput
               style={styles.input}
-              placeholder="Email or Phone"
+              placeholder="Email"
               value={emailOrPhone}
               onChangeText={setEmailOrPhone}
               keyboardType="email-address"

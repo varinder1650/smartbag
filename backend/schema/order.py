@@ -21,6 +21,8 @@ class OrderItemEnhancedResponse(BaseModel):
     product: str
     quantity: int
     price: float
+    product_name: Optional[str] = None  # Add product name field
+    product_image: Optional[List] = None  # Add product images field
 
 
 class DeliveryAddress(BaseModel):
@@ -98,7 +100,7 @@ class OrderResponseEnhanced(BaseModel):
     id: str = Field(None, alias="_id")
     user: str
     user_info: Optional[UserInfo] = None
-    items: List[OrderItemEnhancedResponse]
+    items: List[OrderItemEnhancedResponse]  # Now includes product_name
     delivery_address: DeliveryAddress
     payment_method: str = "cod"
     subtotal: float

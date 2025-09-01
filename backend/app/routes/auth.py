@@ -2,16 +2,17 @@ from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 import logging
 import os
-from datetime import timedelta
+from datetime import timedelta,datetime
 from app.services.auth_service import AuthService
 from db.db_manager import DatabaseManager,get_database
-from schema.user import UserCreate,TokenOut,UserResponse,TokenResponse,UserLogin, GoogleLogin, GoogleLoginResponse,GoogleTokenResponse
+from schema.user import UserCreate,TokenOut,UserResponse,UserLogin, GoogleLogin
 from app.utils.auth import create_refresh_token, get_current_user,create_access_token
-from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
-from fastapi.responses import JSONResponse
+# from slowapi import Limiter
+# from slowapi.errors import RateLimitExceeded
+# from slowapi.util import get_remote_address
+# from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from jose import JWTError, jwt
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -19,6 +20,10 @@ router = APIRouter()
 # Phone update model
 class PhoneUpdate(BaseModel):
     phone: str = Field(..., min_length=10, max_length=15)
+
+# Refresh token model
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 @router.post("/register", response_model=TokenOut)
 async def register_user(user_data: UserCreate, db: DatabaseManager = Depends(get_database)):
@@ -198,4 +203,73 @@ async def google_login(user_info: GoogleLogin, db: DatabaseManager = Depends(get
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Google authentication failed: {str(e)}"
+        )
+
+
+@router.post("/refresh")
+async def refresh_token(
+    refresh_data: dict,
+    db: DatabaseManager = Depends(get_database)
+):
+    try:
+        refresh_token = refresh_data.get("refresh_token")
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Refresh token required"
+            )
+        
+        # Decode refresh token
+        try:
+            payload = jwt.decode(refresh_token, os.getenv('SECRET_KEY'), algorithms=[os.getenv('ALGORITHM')])
+            user_id = payload.get("sub")
+            jti = payload.get("jti")
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        # Check if refresh token exists in database
+        stored_token = await db.find_one("refresh_tokens", {"user_id": user_id, "jti": jti})
+        if not stored_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token not found"
+            )
+        
+        # Check if token is expired
+        if stored_token["expire"] < datetime.utcnow():
+            await db.delete_one("refresh_tokens", {"jti": jti})
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token expired"
+            )
+        
+        # Get user
+        user = await db.find_one("users", {"_id": ObjectId(user_id)})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        # Create new access token
+        access_token = create_access_token(
+            data={'sub': user_id, 'role': user['role']},
+            exp_time=timedelta(minutes=int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', 30)))
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed"
         )
