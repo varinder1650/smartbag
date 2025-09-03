@@ -17,6 +17,8 @@ import Orders from "./pages/Orders";
 import Users from "./pages/Users";
 import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
+import Help from './pages/Help';
+import Requests from './pages/Requests';
 
 const queryClient = new QueryClient();
 
@@ -74,6 +76,8 @@ const AppContent = () => {
         <Route path="orders" element={<Orders />} />
         <Route path="users" element={<Users />} />
         <Route path="pricing" element={<Pricing />} />
+        <Route path="help" element={<Help />} />
+        <Route path="requests" element={<Requests />} />
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<NotFound />} />

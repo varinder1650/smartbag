@@ -53,6 +53,16 @@ const navigation = [
     href: "/dashboard/pricing",
     icon: DollarSign,
   },
+  {
+    name: "Help & Suggestions",
+    href: "/dashboard/help",
+    icon: HelpCircle,
+  },
+  {
+    name: "Product Requests",
+    href: "/dashboard/requests",
+    icon: Lightbulb,
+  },
 ];
 
 export function Sidebar() {

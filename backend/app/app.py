@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.middleware.setup import setup_middleware
 from db.config import settings
-from app.routes import categories, products, orders, auth, cart, brands, settings as settings_route,address,support
+from app.routes import categories, products, orders, auth, cart, brands, settings as settings_route,address,support,delivery
 from datetime import datetime
 
 def create_customer_app() -> FastAPI:
@@ -17,12 +17,13 @@ def create_customer_app() -> FastAPI:
     app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
     app.include_router(products.router, prefix="/products", tags=["Products"])
     app.include_router(categories.router, prefix="/categories", tags=["Categories"])
-    app.include_router(brands.router, prefix="/brands", tags=["Brands"])  # Add this
+    app.include_router(brands.router, prefix="/brands", tags=["Brands"]) 
     app.include_router(orders.router, prefix="/orders", tags=["Orders"])
     app.include_router(cart.router, prefix="/cart", tags=["Cart"])
-    app.include_router(settings_route.router, prefix="/settings", tags=["Settings"])  # Add this
+    app.include_router(settings_route.router, prefix="/settings", tags=["Settings"])  
     app.include_router(address.router, prefix="/address", tags=["Address"])
     app.include_router(support.router, prefix = "/support", tags=["Support"])
+    app.include_router(delivery.router, prefix="/delivery", tags=["Delivery"])
 
     @app.get("/")
     async def root():
