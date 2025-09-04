@@ -8,6 +8,8 @@ from admin.handlers.brand import send_brands, create_brand, update_brand, delete
 from admin.handlers.orders import send_orders,update_order_status
 from admin.handlers.category import send_categories, create_categories, update_category, delete_category
 from admin.handlers.customers import send_customers
+from admin.handlers.help import get_tickets
+from admin.handlers.requests import get_requests
 from admin.handlers.auth import (
     handle_get_users, 
     handle_update_user_role, 
@@ -236,6 +238,12 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
             # Order status handler (placeholder)
             elif msg_type == "update_order_status":
                 await update_order_status(websocket,message.get("data"),user_info,db)
+
+            elif msg_type == "get_help_tickets":
+                await get_tickets(websocket,message.get("filters",{}),db)
+
+            elif msg_type == "get_user_suggestions":
+                await get_requests(websocket,message.get("filters",{}),db)
 
             else:
                 logger.warning(f"Unknown message type: {msg_type}")

@@ -10,6 +10,8 @@ import {
   Menu,
   Tag,
   FolderTree,
+  CircleHelp,
+  LightbulbIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -56,12 +58,12 @@ const navigation = [
   {
     name: "Help & Suggestions",
     href: "/dashboard/help",
-    icon: HelpCircle,
+    icon: CircleHelp,
   },
   {
     name: "Product Requests",
     href: "/dashboard/requests",
-    icon: Lightbulb,
+    icon: LightbulbIcon,
   },
 ];
 
