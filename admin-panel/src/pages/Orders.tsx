@@ -677,6 +677,8 @@ export default function Orders() {
     { value: "confirmed", label: "Confirmed" },
     { value: "preparing", label: "Preparing" },
     { value: "prepared", label: "Prepared" },
+    { value: "Accepted", label: "Accepted" },
+    { value: "Assigned", label: "Assigned" },
     { value: "out_for_delivery", label: "Out for Delivery" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
@@ -968,6 +970,21 @@ export default function Orders() {
             </Button>
           );
           break;
+
+          case 'accepted':
+            actions.push(
+              <Button
+                key="assign"
+                size="sm"
+                variant="secondary"
+                onClick={() => openAssignModal(order)}
+                disabled={isUpdating}
+              >
+                <User className="h-4 w-4 mr-1" />
+                Assign Partner
+              </Button>
+            );
+            break;
       }
     } catch (error) {
       console.error('Error generating status actions for order:', order, error);

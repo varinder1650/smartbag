@@ -48,6 +48,7 @@ export default function ProductDetailScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showCartNotification, setShowCartNotification] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [cartCount, setCartCount] = useState(0); // Added cart count for header badge
   
   // New state for cart quantity
   const [cartQuantity, setCartQuantity] = useState(0);
@@ -71,6 +72,49 @@ export default function ProductDetailScreen() {
     
     return id as string;
   }, [localParams.id, localParams.productId, globalParams.id, globalParams.productId]);
+
+  // Fetch cart count for header badge
+  const fetchCartCount = useCallback(async () => {
+    if (!token) {
+      setCartCount(0);
+      return;
+    }
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.CART, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const cartData = await response.json();
+        const items = cartData.items || [];
+        setCartCount(items.length);
+      } else {
+        setCartCount(0);
+      }
+    } catch (error) {
+      console.error('Error fetching cart count:', error);
+      setCartCount(0);
+    }
+  }, [token]);
+
+  // Cart button press handler
+  const handleCartPress = useCallback(() => {
+    if (!token) {
+      Alert.alert(
+        'Login Required',
+        'Please login to view your cart',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => router.push('/auth/login') }
+        ]
+      );
+      return;
+    }
+    router.push('/(tabs)/explore');
+  }, [token]);
 
   // Memoized fetch function
   const fetchProduct = useCallback(async (productId: string) => {
@@ -133,7 +177,7 @@ export default function ProductDetailScreen() {
       setLoading(false);
       isFetching.current = false;
     }
-  }, [product]); // Only depend on current product state
+  }, [product]);
 
   // Fetch cart quantity for this product
   const fetchCartQuantity = useCallback(async () => {
@@ -175,14 +219,15 @@ export default function ProductDetailScreen() {
       Alert.alert('Error', 'No product ID provided');
       router.back();
     }
-  }, []); // Empty dependency array - only run once on mount
+  }, []);
 
-  // Fetch cart quantity when product or token changes
+  // Fetch cart data when product or token changes
   useEffect(() => {
     if (product && token) {
       fetchCartQuantity();
+      fetchCartCount();
     }
-  }, [product, token, fetchCartQuantity]);
+  }, [product, token, fetchCartQuantity, fetchCartCount]);
 
   // Memoized image processing
   const getImageUrls = useCallback((images: (string | ProductImage)[]): string[] => {
@@ -251,6 +296,7 @@ export default function ProductDetailScreen() {
       if (response.ok) {
         // Update local cart quantity
         setCartQuantity(prev => prev + 1);
+        setCartCount(prev => prev + 1); // Update cart count for badge
 
         // Show notification
         setShowCartNotification(true);
@@ -308,6 +354,7 @@ export default function ProductDetailScreen() {
 
             if (response.ok) {
               setCartQuantity(0);
+              setCartCount(prev => Math.max(0, prev - cartQuantity));
             } else {
               const errorData = await response.json();
               Alert.alert('Error', errorData.message || 'Failed to remove item');
@@ -335,7 +382,10 @@ export default function ProductDetailScreen() {
             });
 
             if (response.ok) {
+              const oldQuantity = cartQuantity;
+              const quantityDiff = newQuantity - oldQuantity;
               setCartQuantity(newQuantity);
+              setCartCount(prev => prev + quantityDiff);
             } else {
               const errorData = await response.json();
               Alert.alert('Error', errorData.message || 'Failed to update quantity');
@@ -349,7 +399,7 @@ export default function ProductDetailScreen() {
     } finally {
       setAddingToCart(false);
     }
-  }, [token, product]);
+  }, [token, product, cartQuantity]);
 
   // Memoized viewable items changed handler
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
@@ -421,7 +471,7 @@ export default function ProductDetailScreen() {
             onPress={() => updateCartQuantity(cartQuantity - 1)}
             disabled={addingToCart}
           >
-            <Ionicons name="remove" size={20} color="#007AFF" />
+            <Ionicons name="remove" size={20} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.quantityControlText}>{cartQuantity}</Text>
           <TouchableOpacity
@@ -429,7 +479,7 @@ export default function ProductDetailScreen() {
             onPress={() => updateCartQuantity(cartQuantity + 1)}
             disabled={addingToCart || cartQuantity >= (product?.stock || 0)}
           >
-            <Ionicons name="add" size={20} color="#007AFF" />
+            <Ionicons name="add" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       );
@@ -482,13 +532,20 @@ export default function ProductDetailScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
+      {/* Header with Cart Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Product Details</Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity style={styles.cartButton} onPress={handleCartPress}>
+          <Ionicons name="bag-outline" size={24} color="#333" />
+          {cartCount > 0 && (
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{cartCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Image Carousel */}
@@ -547,7 +604,7 @@ export default function ProductDetailScreen() {
             <Text style={styles.detailValue}>{product.brand?.name || 'N/A'}</Text>
           </View>
           
-          {product.keywords && product.keywords.length > 0 && (
+          {/* {product.keywords && product.keywords.length > 0 && (
             <View style={styles.detailsRow}>
               <Text style={styles.detailLabel}>Tags:</Text>
               <View style={styles.tagsContainer}>
@@ -563,7 +620,7 @@ export default function ProductDetailScreen() {
                 )}
               </View>
             </View>
-          )}
+          )} */}
         </View>
       </View>
 
@@ -647,8 +704,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  placeholder: {
-    width: 40,
+  cartButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   carouselContainer: {
     position: 'relative',
@@ -800,7 +875,7 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
-  // New styles for quantity controls
+  // Fixed styles for quantity controls with proper + and - icons
   quantityControlsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
