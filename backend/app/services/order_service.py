@@ -20,7 +20,8 @@ class OrderService:
             raise ValueError("valid total amount is required")
         
         order_data['user'] = current_user.id
-
+        order_data['accepter_partners'] = []
+        
         try:
             validated_order = OrderCreate(**order_data)
         except Exception as Validation_error:

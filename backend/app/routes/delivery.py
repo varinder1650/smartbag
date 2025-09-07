@@ -274,14 +274,15 @@ async def accept_delivery_order(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Order with status '{order.get('order_status')}' cannot be assigned for delivery"
             )
-        
+
+        accepted_partners = order.get(accepted_partners).append(ObjectId(current_user.id))
         # Assign the order to the delivery partner
         await db.update_one(
             "orders",
             {"_id": order_object_id},
             {
                 "$set": {
-                    "delivery_partner": ObjectId(current_user.id),
+                    "accepted_partners": accepted_partners,
                     "order_status": "accepted",
                     "accepted_at": datetime.utcnow()
                 }

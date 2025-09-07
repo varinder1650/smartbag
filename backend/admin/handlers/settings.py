@@ -82,12 +82,12 @@ async def handle_get_analytics(websocket: WebSocket, data: dict, db):
             "message": "Failed to fetch analytics"
         })
 
-async def handle_get_pricing_config(websocket: WebSocket, db):
+async def get_pricing_config(websocket: WebSocket, db):
     """Get current pricing configuration"""
     try:
         # Try to get existing pricing config
         pricing_config = await db.find_one("pricing_config", {"active": True})
-        
+        # print(pricing_config)
         if not pricing_config:
             # Create default config if none exists
             default_config = {
@@ -109,15 +109,16 @@ async def handle_get_pricing_config(websocket: WebSocket, db):
                 "created_at": datetime.utcnow(),
                 "created_by": "system"
             }
-            
+            # print(default_config)
             await db.insert_one("pricing_config", default_config)
             pricing_config = default_config
         
         pricing_config = serialize_document(pricing_config)
-        
+        # print("============================")
+        # print(pricing_config)
         await websocket.send_json({
             "type": "pricing_config",
-            "config": pricing_config
+            "data": pricing_config
         })
         
     except Exception as e:
@@ -127,10 +128,18 @@ async def handle_get_pricing_config(websocket: WebSocket, db):
             "message": "Failed to fetch pricing configuration"
         })
 
-async def handle_update_pricing_config(websocket: WebSocket, data: dict, user_info: dict, db):
+async def update_pricing_config(websocket: WebSocket, data: dict, user_info: dict, db):
     """Update pricing configuration"""
     try:
         config_data = data.get("data", {})
+        print("Received config_data:", config_data)
+        
+        if not config_data:
+            await websocket.send_json({
+                "type": "error", 
+                "message": "No configuration data received"
+            })
+            return
         
         # Add metadata
         config_data.update({
@@ -138,15 +147,15 @@ async def handle_update_pricing_config(websocket: WebSocket, data: dict, user_in
             "updated_at": datetime.utcnow(),
             "updated_by": user_info["email"]
         })
-        
-        # Update or create pricing config
+
+        price_id = await db.find_one("pricing_config",{"active":True})
+        print(price_id)
         result = await db.update_one(
-            "pricing_config",
-            {"active": True},
-            {"$set": config_data},
-            upsert=True
-        )
-        
+                "pricing_config",
+                {"_id": price_id['_id']},
+                {"$set": config_data}
+            )
+
         if result:
             await websocket.send_json({
                 "type": "pricing_updated",

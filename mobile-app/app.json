@@ -1,74 +1,3 @@
-// {
-//   "expo": {
-//     "name": "SmartBag",
-//     "slug": "smartbag",
-//     "version": "1.0.0",
-//     "orientation": "portrait",
-//     "userInterfaceStyle": "light",
-//     "scheme": "smartbag",
-//     "splash": {
-//       "resizeMode": "contain",
-//       "backgroundColor": "#ffffff"
-//     },
-//     "assetBundlePatterns": [
-//       "**/*"
-//     ],
-//     "extra": {
-//       // "EXPO_PUBLIC_API_URL": "https://smartbag.onrender.com/api/",
-//       // "EXPO_PUBLIC_API_URL": "http://10.0.0.74:8000/api/",
-//       "EXPO_PUBLIC_OLA_KRUTRIM_API_KEY": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ",
-//       "eas": {
-//         "projectId": "your-project-id-here"
-//       }
-//     },
-//     "ios": {
-//       "supportsTablet": true,
-//       "bundleIdentifier": "com.ios.smartbag",
-//       "infoPlist": {
-//         "NSLocationWhenInUseUsageDescription": "This app needs access to location to help you select your delivery address.",
-//         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to help you select your delivery address."
-//       },
-//       "config": {
-//         "krutrimMaps": {
-//           "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
-//         }
-//       }
-//     },
-//     "android": {
-//       "adaptiveIcon": {
-//         "backgroundColor": "#ffffff"
-//       },
-//       "permissions": [
-//         "ACCESS_FINE_LOCATION",
-//         "ACCESS_COARSE_LOCATION"
-//       ],
-//       "config": {
-//         "krutrimMaps": {
-//           "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
-//         }
-//       },
-//       "package":"com.ios.smartbag"
-//     },
-//     "web": {
-//       "favicon": "./assets/favicon.png"
-//     },
-//     "plugins": [
-//       [
-//         "expo-location",
-//         {
-//           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to help you select your delivery address."
-//         }
-//       ],
-//       [
-//         "@react-native-google-signin/google-signin",
-//         {
-//           "iosUrlScheme": "com.googleusercontent.apps.1029983278193-mgl5t7mtqajk2a3vocs6qchbir317o9q"
-//         }
-//       ]
-//     ]
-//   }
-// }
-
 {
   "expo": {
     "name": "SmartBag",
@@ -85,7 +14,7 @@
       "**/*"
     ],
     "extra": {
-      "EXPO_PUBLIC_API_URL": "http://10.0.0.87:8000/api/",
+      "EXPO_PUBLIC_API_URL": "http://10.0.0.233:8000/api/",
       "EXPO_PUBLIC_OLA_KRUTRIM_API_KEY": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ",
       "eas": {
         "projectId": "your-project-id-here"
@@ -100,7 +29,7 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSExceptionDomains": {
-            "10.0.0.87": {
+            "10.0.0.233": {
               "NSExceptionAllowsInsecureHTTPLoads": true
             },
             "localhost": {

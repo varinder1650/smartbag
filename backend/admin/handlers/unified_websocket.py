@@ -18,8 +18,8 @@ from admin.handlers.auth import (
 from admin.handlers.settings import (
     send_inventory_status, 
     handle_get_analytics, 
-    handle_get_pricing_config, 
-    handle_update_pricing_config
+    get_pricing_config, 
+    update_pricing_config
 )
 
 logger = logging.getLogger(__name__)
@@ -218,10 +218,10 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
 
             # Pricing handlers
             elif msg_type == "get_pricing_config":
-                await handle_get_pricing_config(websocket, db)
+                await get_pricing_config(websocket, db)
                 
             elif msg_type == "update_pricing_config":
-                await handle_update_pricing_config(websocket, message.get("data"), user_info, db)
+                await update_pricing_config(websocket, message.get("data"), user_info, db)
 
             # Settings handlers
             elif msg_type == "get_inventory_status":
