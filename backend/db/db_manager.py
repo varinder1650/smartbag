@@ -54,6 +54,16 @@ class DatabaseManager:
         except Exception as e:
             raise e
     
+    async def update_many(self, collection: str, filter_dict: Dict[str, Any], update_dict: Dict[str, Any]):
+        try:
+            if any(key.startswith('$') for key in update_dict.keys()):
+                result = await self.db[collection].update_many(filter_dict, update_dict)
+            else:
+                result = await self.db[collection].update_many(filter_dict, {"$set": update_dict})
+            return result.modified_count > 0
+        except Exception as e:
+            raise e
+
     async def count_documents(self,collection:str,filter_dict:Dict[str,Any] = None):
         try:
             return await self.db[collection].count_documents(filter_dict or {})

@@ -1,3 +1,4 @@
+from ast import expr_context
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 import logging
@@ -11,7 +12,7 @@ from app.utils.auth import create_refresh_token, get_current_user,create_access_
 # from slowapi.errors import RateLimitExceeded
 # from slowapi.util import get_remote_address
 # from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from jose import JWTError, jwt
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,24 @@ async def update_phone(
 @router.get("/profile")
 async def get_me(current_user=Depends(get_current_user)):
     return current_user
+
+class UpdateUser(BaseModel):
+    name: str
+
+@router.put("/profile")
+async def update_profile(user_info:UpdateUser,db: DatabaseManager = Depends(get_database),current_user = Depends(get_current_user)):
+    try:
+        result = await db.update_one("users", {"_id": ObjectId(current_user.id)}, {"name":user_info.name})
+        print(result)
+        return {
+            "name": user_info.name,
+        }
+    # except ValidationError as e:
+    #     print(f"Validation error: {e}")
+    #     raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        print(f"Other error: {e}")
+        raise e
 
 @router.post("/google", response_model=TokenOut)
 async def google_login(user_info: GoogleLogin, db: DatabaseManager = Depends(get_database)):

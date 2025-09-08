@@ -1,606 +1,3 @@
-// import { useState, useEffect } from "react";
-// import { Button } from "@/components/ui/button";
-// import { Input } from "@/components/ui/input";
-// import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-// import { Badge } from "@/components/ui/badge";
-// import { StatusBadge } from "@/components/ui/status-badge";
-// import {
-//   Table,
-//   TableBody,
-//   TableCell,
-//   TableHead,
-//   TableHeader,
-//   TableRow,
-// } from "@/components/ui/table";
-// import {
-//   Dialog,
-//   DialogContent,
-//   DialogDescription,
-//   DialogHeader,
-//   DialogTitle,
-// } from "@/components/ui/dialog";
-// import { Label } from "@/components/ui/label";
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// import { Textarea } from "@/components/ui/textarea";
-// import { useDashboardStore } from "@/store/dashboardStore";
-// import { wsService } from "@/services/websocket";
-// import { useToast } from "@/hooks/use-toast";
-// import { Search, Eye, Truck, Clock, CheckCircle, Package, Loader2 } from "lucide-react";
-// import { format, parseISO } from "date-fns";
-
-// export default function Orders() {
-//   const { orders, setOrders } = useDashboardStore();
-//   const { toast } = useToast();
-//   const [searchQuery, setSearchQuery] = useState("");
-//   const [statusFilter, setStatusFilter] = useState("all");
-//   const [selectedOrder, setSelectedOrder] = useState<any>(null);
-//   const [showOrderModal, setShowOrderModal] = useState(false);
-//   const [deliveryPartner, setDeliveryPartner] = useState("");
-//   const [statusNotes, setStatusNotes] = useState("");
-//   const [isLoading, setIsLoading] = useState(true);
-//   const [isUpdating, setIsUpdating] = useState(false);
-
-//   const statusOptions = [
-//     { value: "all", label: "All Orders" },
-//     { value: "pending", label: "Pending" },
-//     { value: "confirmed", label: "Confirmed" },
-//     { value: "preparing", label: "Preparing" },
-//     { value: "prepared", label: "Prepared" },
-//     { value: "out_for_delivery", label: "Out for Delivery" },
-//     { value: "delivered", label: "Delivered" },
-//     { value: "cancelled", label: "Cancelled" },
-//   ];
-
-//   // Request initial data and set up real-time handlers
-//   useEffect(() => {
-//     console.log('Orders component mounted');
-    
-//     // Request orders data
-//     if (wsService.isConnected()) {
-//       console.log('Requesting orders data...');
-//       wsService.send({
-//         type: 'get_orders',
-//         filters: {}
-//       });
-//     } else {
-//       console.log('WebSocket not connected, retrying in 2 seconds...');
-//       setTimeout(() => {
-//         if (wsService.isConnected()) {
-//           wsService.send({
-//             type: 'get_orders',
-//             filters: {}
-//           });
-//         }
-//       }, 2000);
-//     }
-
-//     // Set up real-time message handlers
-//     const handleOrdersData = (data: any) => {
-//       console.log('Received orders data:', data);
-//       try {
-//         const ordersArray = Array.isArray(data.orders) ? data.orders : [];
-//         console.log(ordersArray)
-//         setOrders(ordersArray);
-//         setIsLoading(false);
-//       } catch (error) {
-//         console.error('Error processing orders data:', error);
-//         setOrders([]);
-//         setIsLoading(false);
-//       }
-//     };
-
-//     const handleOrderUpdated = (data: any) => {
-//       console.log('Order updated:', data);
-//       setIsUpdating(false);
-//       // Refresh orders list
-//       wsService.send({ type: 'get_orders', filters: {} });
-//       toast({
-//         title: "Order Updated",
-//         description: "Order has been updated successfully",
-//       });
-//     };
-
-//     const handleOrderStatusChanged = (data: any) => {
-//       console.log('Order status changed:', data);
-//       setIsUpdating(false);
-//       // Refresh orders list
-//       wsService.send({ type: 'get_orders', filters: {} });
-//       toast({
-//         title: "Status Updated",
-//         description: "Order status has been updated successfully",
-//       });
-//     };
-
-//     const handleError = (data: any) => {
-//       console.error('Orders WebSocket error:', data);
-//       setIsLoading(false);
-//       setIsUpdating(false);
-      
-//       // Only show error toast for relevant errors
-//       if (!data.message?.includes('Unknown message type') && 
-//           !data.message?.includes('not implemented')) {
-//         toast({
-//           title: "Error",
-//           description: data.message || "An error occurred",
-//           variant: "destructive",
-//         });
-//       }
-//     };
-
-//     // Register message handlers
-//     wsService.onMessage("orders_data", handleOrdersData);
-//     wsService.onMessage("order_updated", handleOrderUpdated);
-//     wsService.onMessage("order_status_updated", handleOrderUpdated);
-//     wsService.onMessage("order_status_changed", handleOrderStatusChanged);
-//     wsService.onMessage("error", handleError);
-
-//     // Cleanup function
-//     return () => {
-//       wsService.onMessage("orders_data", () => {});
-//       wsService.onMessage("order_updated", () => {});
-//       wsService.onMessage("order_status_updated", () => {});
-//       wsService.onMessage("order_status_changed", () => {});
-//       wsService.onMessage("error", () => {});
-//     };
-//   }, [setOrders, toast]);
-
-//   // Safely filter orders with proper error handling
-//   const filteredOrders = (() => {
-//     try {
-//       if (!Array.isArray(orders)) {
-//         console.warn('Orders is not an array:', orders);
-//         return [];
-//       }
-      
-//       return orders.filter(order => {
-//         try {
-//           if (!order || !order.id) return false;
-          
-//           const searchTerm = searchQuery.toLowerCase();
-//           const matchesSearch = (order.id || '').toString().toLowerCase().includes(searchTerm) ||
-//                                (order.customer || '').toLowerCase().includes(searchTerm);
-//           const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-//           return matchesSearch && matchesStatus;
-//         } catch (error) {
-//           console.error('Error filtering order:', order, error);
-//           return false;
-//         }
-//       });
-//     } catch (error) {
-//       console.error('Error in filteredOrders:', error);
-//       return [];
-//     }
-//   })();
-
-//   const handleStatusChange = (orderId: string, newStatus: string) => {
-//     if (!orderId) {
-//       toast({
-//         title: "Error",
-//         description: "Invalid order ID",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     console.log(`Updating order ${orderId} status to ${newStatus}`);
-//     setIsUpdating(true);
-
-//     wsService.send({
-//       type: 'update_order_status',
-//       data: {
-//         order_id: orderId,
-//         status: newStatus,
-//         notes: statusNotes,
-//         delivery_partner: newStatus === 'out_for_delivery' ? deliveryPartner : undefined
-//       }
-//     });
-
-//     toast({
-//       title: "Updating Order Status",
-//       description: `Changing order ${orderId} status to ${newStatus}...`,
-//     });
-
-//     setStatusNotes("");
-//     setDeliveryPartner("");
-//   };
-
-//   const handleViewOrder = (order: any) => {
-//     if (!order) {
-//       console.error('Cannot view order: order is null/undefined');
-//       return;
-//     }
-//     console.log('Viewing order:', order);
-//     setSelectedOrder(order);
-//     setShowOrderModal(true);
-//   };
-
-//   // FIXED: Added the missing getStatusActions function
-//   const getStatusActions = (order: any) => {
-//     if (!order || !order.status) return [];
-    
-//     const actions = [];
-    
-//     try {
-//       switch (order.status) {
-//         case 'pending':
-//           actions.push(
-//             <Button
-//               key="confirm"
-//               size="sm"
-//               onClick={() => handleStatusChange(order.id, 'confirmed')}
-//               disabled={isUpdating}
-//             >
-//               <CheckCircle className="h-4 w-4 mr-1" />
-//               Confirm
-//             </Button>
-//           );
-//           break;
-//         case 'confirmed':
-//           actions.push(
-//             <Button
-//               key="prepare"
-//               size="sm"
-//               onClick={() => handleStatusChange(order.id, 'preparing')}
-//               disabled={isUpdating}
-//             >
-//               <Clock className="h-4 w-4 mr-1" />
-//               Start Preparing
-//             </Button>
-//           );
-//           break;
-//         case 'preparing':
-//           actions.push(
-//             <Button
-//               key="prepared"
-//               size="sm"
-//               onClick={() => handleStatusChange(order.id, 'prepared')}
-//               disabled={isUpdating}
-//             >
-//               <CheckCircle className="h-4 w-4 mr-1" />
-//               Mark Prepared
-//             </Button>
-//           );
-//           break;
-//         case 'prepared':
-//           actions.push(
-//             <Button
-//               key="deliver"
-//               size="sm"
-//               onClick={() => handleStatusChange(order.id, 'out_for_delivery')}
-//               disabled={isUpdating}
-//             >
-//               <Truck className="h-4 w-4 mr-1" />
-//               Out for Delivery
-//             </Button>
-//           );
-//           break;
-//       }
-//     } catch (error) {
-//       console.error('Error generating status actions for order:', order, error);
-//     }
-
-//     return actions;
-//   };
-
-//   // Error boundary-like error handling
-//   if (!Array.isArray(orders) && !isLoading) {
-//     return (
-//       <div className="p-6 space-y-6">
-//         <div>
-//           <h1 className="text-3xl font-bold">Orders</h1>
-//           <p className="text-muted-foreground">Manage customer orders and delivery status</p>
-//         </div>
-//         <Card>
-//           <CardContent className="text-center py-8">
-//             <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-//             <p className="text-muted-foreground">Error loading orders. Please refresh the page.</p>
-//             <Button onClick={() => window.location.reload()} className="mt-4">
-//               Refresh Page
-//             </Button>
-//           </CardContent>
-//         </Card>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div className="p-6 space-y-6">
-//       <div>
-//         <h1 className="text-3xl font-bold">Orders</h1>
-//         <p className="text-muted-foreground">Manage customer orders and delivery status</p>
-//       </div>
-
-//       <Card>
-//         <CardHeader>
-//           <CardTitle>Order Management</CardTitle>
-//           <CardDescription>
-//             {isLoading ? "Loading orders..." : `${filteredOrders.length} orders found`}
-//           </CardDescription>
-//           <div className="flex items-center space-x-4">
-//             <div className="flex items-center space-x-2">
-//               <Search className="h-4 w-4 text-muted-foreground" />
-//               <Input
-//                 placeholder="Search orders..."
-//                 value={searchQuery}
-//                 onChange={(e) => setSearchQuery(e.target.value)}
-//                 className="max-w-sm"
-//                 disabled={isLoading}
-//               />
-//             </div>
-//             <Select value={statusFilter || "all"} onValueChange={setStatusFilter} disabled={isLoading}>
-//               <SelectTrigger className="w-[180px]">
-//                 <SelectValue />
-//               </SelectTrigger>
-//               <SelectContent>
-//                 {statusOptions.map((option) => (
-//                   <SelectItem key={option.value} value={option.value}>
-//                     {option.label}
-//                   </SelectItem>
-//                 ))}
-//               </SelectContent>
-//             </Select>
-//           </div>
-//         </CardHeader>
-//         <CardContent>
-//           {isLoading ? (
-//             <div className="text-center py-8">
-//               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-//               <p className="text-muted-foreground">Loading orders...</p>
-//             </div>
-//           ) : (
-//             <>
-//               <Table>
-//                 <TableHeader>
-//                   <TableRow>
-//                     <TableHead>Order ID</TableHead>
-//                     <TableHead>Customer</TableHead>
-//                     <TableHead>Total</TableHead>
-//                     <TableHead>Status</TableHead>
-//                     <TableHead>Delivery Partner</TableHead>
-//                     <TableHead>Date</TableHead>
-//                     <TableHead>Time</TableHead>
-//                     <TableHead>Actions</TableHead>
-//                   </TableRow>
-//                 </TableHeader>
-//                 <TableBody>
-//                   {filteredOrders.length > 0 ? filteredOrders.map((order) => {
-//                     try {
-//                       return (
-//                         <TableRow key={order._id || order.id}>
-//                           <TableCell className="font-medium">#{order.id || 'N/A'}</TableCell>
-//                           <TableCell>{order.user_name || 'Unknown'}</TableCell>
-//                           <TableCell>₹{order.total || '0.00'}</TableCell>
-//                           <TableCell>
-//                             <StatusBadge status={order.status || 'pending'} />
-//                           </TableCell>
-//                           <TableCell>
-//                             {order.deliveryPartner || (
-//                               <span className="text-muted-foreground">Not assigned</span>
-//                             )}
-//                           </TableCell>
-//                           <TableCell>
-//                             {order.created_at ? (
-//                               format(parseISO(order.created_at), "MMM dd, yyyy")
-//                             ) : (
-//                               <span className="text-muted-foreground">N/A</span>
-                              
-//                             )}
-//                           </TableCell>
-//                           <TableCell>
-//                             {order.created_at ? (
-//                               format(parseISO(order.created_at), "HH:mm")
-//                             ) : (
-//                               <span className="text-muted-foreground">N/A</span>
-                              
-//                             )}
-//                           </TableCell>
-//                           <TableCell>
-//                             <div className="flex space-x-2">
-//                               <Button
-//                                 size="sm"
-//                                 variant="outline"
-//                                 onClick={() => handleViewOrder(order)}
-//                                 disabled={isUpdating}
-//                               >
-//                                 <Eye className="h-4 w-4" />
-//                               </Button>
-//                               {getStatusActions(order)}
-//                             </div>
-//                           </TableCell>
-//                         </TableRow>
-//                       );
-//                     } catch (error) {
-//                       console.error('Error rendering order row:', order, error);
-//                       return (
-//                         <TableRow key={`error-${order._id || order.id || Math.random()}`}>
-//                           <TableCell colSpan={7} className="text-center text-muted-foreground">
-//                             Error displaying order data
-//                           </TableCell>
-//                         </TableRow>
-//                       );
-//                     }
-//                   }) : (
-//                     <TableRow>
-//                       <TableCell colSpan={7} className="text-center py-8">
-//                         <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-//                         <p className="text-muted-foreground">No orders found matching your criteria.</p>
-//                       </TableCell>
-//                     </TableRow>
-//                   )}
-//                 </TableBody>
-//               </Table>
-//             </>
-//           )}
-//         </CardContent>
-//       </Card>
-
-//       {/* Order Details Modal */}
-//       <Dialog open={showOrderModal} onOpenChange={setShowOrderModal}>
-//         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-//           <DialogHeader>
-//             <DialogTitle>Order Details - #{selectedOrder?.id || 'N/A'}</DialogTitle>
-//             <DialogDescription>
-//               Complete order information and status management
-//             </DialogDescription>
-//           </DialogHeader>
-          
-//           {selectedOrder && (
-//             <div className="space-y-6">
-//               {/* Customer Info */}
-//               <div className="grid grid-cols-2 gap-6">
-//                 <Card>
-//                   <CardHeader>
-//                     <CardTitle className="text-lg">Customer Information</CardTitle>
-//                   </CardHeader>
-//                   <CardContent>
-//                     <div className="space-y-2">
-//                       <p><strong>Name:</strong> {selectedOrder.user_name || 'N/A'}</p>
-//                       <p><strong>Email:</strong> {selectedOrder.user_email || 'N/A'}</p>
-//                       <p><strong>Phone:</strong> {selectedOrder.user_phone || 'N/A'}</p>
-//                       <p><strong>Order Date:</strong> {
-//                         selectedOrder.created_at ? 
-//                           format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm") : 
-//                           'N/A'
-//                       }</p>
-//                       <p><strong>Total:</strong> ₹{selectedOrder.total || '0.00'}</p>
-//                     </div>
-//                   </CardContent>
-//                 </Card>
-
-//                 <Card>
-//                   <CardHeader>
-//                     <CardTitle className="text-lg">Delivery Information</CardTitle>
-//                   </CardHeader>
-//                   <CardContent>
-//                     <div className="space-y-2">
-//                       <p><strong>Delivery Address:</strong> {selectedOrder.delivery_address['address'] || "Not assigned"}</p>
-//                       <p><strong>Delivery Partner:</strong> {selectedOrder.deliveryPartner || "Not assigned"}</p>
-//                       <p><strong>Status:</strong> <StatusBadge status={selectedOrder.status || 'pending'} /></p>
-                      
-//                       {selectedOrder.status === 'prepared' && (
-//                         <div className="space-y-3 mt-4">
-//                           <Label htmlFor="delivery-partner">Assign Delivery Partner</Label>
-//                           <Input
-//                             id="delivery-partner"
-//                             placeholder="Enter delivery partner name"
-//                             value={deliveryPartner}
-//                             onChange={(e) => setDeliveryPartner(e.target.value)}
-//                           />
-//                           <Button
-//                             onClick={() => handleStatusChange(selectedOrder.id, 'out_for_delivery')}
-//                             disabled={!deliveryPartner || isUpdating}
-//                           >
-//                             <Truck className="h-4 w-4 mr-2" />
-//                             {isUpdating ? "Assigning..." : "Assign & Send for Delivery"}
-//                           </Button>
-//                         </div>
-//                       )}
-//                     </div>
-//                   </CardContent>
-//                 </Card>
-//               </div>
-
-//               {/* Order Items */}
-//               <Card>
-//                 <CardHeader>
-//                   <CardTitle className="text-lg">Order Items</CardTitle>
-//                 </CardHeader>
-//                 <CardContent>
-//                   <Table>
-//                     <TableHeader>
-//                       <TableRow>
-//                         <TableHead>Product</TableHead>
-//                         <TableHead>Price</TableHead>
-//                         <TableHead>Quantity</TableHead>
-//                         <TableHead>Total</TableHead>
-//                       </TableRow>
-//                     </TableHeader>
-//                     <TableBody>
-//                       {selectedOrder.items && Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
-//                         selectedOrder.items.map((item: any, index: number) => {
-//                           try {
-//                             return (
-//                               <TableRow key={item.id || `item-${index}`}>
-//                                 <TableCell>
-//                                   <div className="flex items-center space-x-3">
-//                                     {item.image ? (
-//                                       <img
-//                                         src={item.product_image[0]}
-//                                         alt={item.name || 'Product'}
-//                                         className="h-10 w-10 rounded-lg object-cover"
-//                                         onError={(e) => {
-//                                           console.error('Failed to load item image:', item.image);
-//                                           (e.currentTarget as HTMLElement).style.display = 'none';
-//                                         }}
-//                                       />
-//                                     ) : (
-//                                       <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-//                                         <Package className="h-5 w-5 text-muted-foreground" />
-//                                       </div>
-//                                     )}
-//                                     <span>{item.product_name || 'Unknown Product'}</span>
-//                                   </div>
-//                                 </TableCell>
-//                                 <TableCell>₹{item.price || '0.00'}</TableCell>
-//                                 <TableCell>{item.quantity || 0}</TableCell>
-//                                 <TableCell>₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</TableCell>
-//                               </TableRow>
-//                             );
-//                           } catch (error) {
-//                             console.error('Error rendering order item:', item, error);
-//                             return (
-//                               <TableRow key={`error-item-${index}`}>
-//                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-//                                   Error displaying item
-//                                 </TableCell>
-//                               </TableRow>
-//                             );
-//                           }
-//                         })
-//                       ) : (
-//                         <TableRow>
-//                           <TableCell colSpan={4} className="text-center py-4">
-//                             <p className="text-muted-foreground">No items found for this order</p>
-//                           </TableCell>
-//                         </TableRow>
-//                       )}
-//                     </TableBody>
-//                   </Table>
-//                 </CardContent>
-//               </Card>
-
-//               {/* Status Change */}
-//               <Card>
-//                 <CardHeader>
-//                   <CardTitle className="text-lg">Update Order Status</CardTitle>
-//                 </CardHeader>
-//                 <CardContent>
-//                   <div className="space-y-4">
-//                     <div className="flex space-x-2">
-//                       {getStatusActions(selectedOrder)}
-//                     </div>
-                    
-//                     <div className="space-y-2">
-//                       <Label htmlFor="status-notes">Notes (optional)</Label>
-//                       <Textarea
-//                         id="status-notes"
-//                         placeholder="Add any notes about the status change..."
-//                         value={statusNotes}
-//                         onChange={(e) => setStatusNotes(e.target.value)}
-//                         disabled={isUpdating}
-//                       />
-//                     </div>
-//                   </div>
-//                 </CardContent>
-//               </Card>
-//             </div>
-//           )}
-//         </DialogContent>
-//       </Dialog>
-//     </div>
-//   );
-// }
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -665,6 +62,7 @@ export default function Orders() {
   const [showOrderDrawer, setShowOrderDrawer] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [deliveryPartners, setDeliveryPartners] = useState<DeliveryPartner[]>([]);
+  const [deliveryRequests, setDeliveryRequests] = useState<DeliveryPartner[]>([]); // New state for delivery requests
   const [selectedDeliveryPartner, setSelectedDeliveryPartner] = useState("");
   const [statusNotes, setStatusNotes] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -677,8 +75,8 @@ export default function Orders() {
     { value: "confirmed", label: "Confirmed" },
     { value: "preparing", label: "Preparing" },
     { value: "prepared", label: "Prepared" },
-    { value: "Accepted", label: "Accepted" },
-    { value: "Assigned", label: "Assigned" },
+    { value: "accepted", label: "Accepted" }, // This is the status that shows assign button
+    { value: "assigned", label: "Assigned" },
     { value: "out_for_delivery", label: "Out for Delivery" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
@@ -695,9 +93,9 @@ export default function Orders() {
         type: 'get_orders',
         filters: {}
       });
-      wsService.send({
-        type: 'get_delivery_partners'
-      });
+      // wsService.send({
+      //   type: 'get_delivery_partners'
+      // });
     } else {
       console.log('WebSocket not connected, retrying in 2 seconds...');
       setTimeout(() => {
@@ -706,9 +104,9 @@ export default function Orders() {
             type: 'get_orders',
             filters: {}
           });
-          wsService.send({
-            type: 'get_delivery_partners'
-          });
+          // wsService.send({
+          //   type: 'get_delivery_partners'
+          // });
         }
       }, 2000);
     }
@@ -732,6 +130,11 @@ export default function Orders() {
       setDeliveryPartners(data.delivery_partners || []);
     };
 
+    const handleDeliveryRequestsData = (data: any) => {
+      console.log('Received delivery requests data for order:', data);
+      setDeliveryRequests(data.delivery_requests || []);
+    };
+
     const handleOrderStatusHistory = (data: any) => {
       console.log('Received order status history:', data);
       setOrderStatusHistory(data.history || []);
@@ -751,10 +154,12 @@ export default function Orders() {
       console.log('Order assigned:', data);
       setIsUpdating(false);
       setShowAssignModal(false);
+      setSelectedDeliveryPartner("");
+      setStatusNotes("");
       wsService.send({ type: 'get_orders', filters: {} });
       toast({
         title: "Order Assigned",
-        description: `Order assigned to delivery partner successfully`,
+        description: "Order assigned to delivery partner successfully",
       });
     };
 
@@ -776,6 +181,7 @@ export default function Orders() {
     // Register message handlers
     wsService.onMessage("orders_data", handleOrdersData);
     wsService.onMessage("delivery_partners_data", handleDeliveryPartnersData);
+    wsService.onMessage("delivery_requests_data", handleDeliveryRequestsData);
     wsService.onMessage("order_status_history", handleOrderStatusHistory);
     wsService.onMessage("order_updated", handleOrderUpdated);
     wsService.onMessage("order_assigned", handleOrderAssigned);
@@ -784,6 +190,7 @@ export default function Orders() {
     return () => {
       wsService.onMessage("orders_data", () => {});
       wsService.onMessage("delivery_partners_data", () => {});
+      wsService.onMessage("delivery_requests_data", () => {});
       wsService.onMessage("order_status_history", () => {});
       wsService.onMessage("order_updated", () => {});
       wsService.onMessage("order_assigned", () => {});
@@ -804,7 +211,7 @@ export default function Orders() {
           
           const searchTerm = searchQuery.toLowerCase();
           const matchesSearch = (order.id || '').toString().toLowerCase().includes(searchTerm) ||
-                               (order.customer || '').toLowerCase().includes(searchTerm);
+                               (order.user_name || order.customer || '').toLowerCase().includes(searchTerm);
           const matchesStatus = statusFilter === "all" || order.status === statusFilter;
           return matchesSearch && matchesStatus;
         } catch (error) {
@@ -868,7 +275,7 @@ export default function Orders() {
       data: {
         order_id: orderId,
         delivery_partner_id: selectedDeliveryPartner,
-        notes: statusNotes
+        // notes: statusNotes
       }
     });
 
@@ -907,6 +314,16 @@ export default function Orders() {
 
   const openAssignModal = (order: any) => {
     setSelectedOrder(order);
+    setSelectedDeliveryPartner("");
+    setDeliveryRequests([]); // Clear previous requests
+    
+    // Fetch delivery partners who requested this specific order
+    console.log('Fetching delivery requests for order:', order.id);
+    wsService.send({
+      type: 'get_delivery_requests_for_order',
+      data: { order_id: order.id }
+    });
+    
     setShowAssignModal(true);
   };
 
@@ -956,7 +373,7 @@ export default function Orders() {
             </Button>
           );
           break;
-        case 'prepared':
+        case 'accepted': // Changed from 'prepared' to 'accepted'
           actions.push(
             <Button
               key="assign"
@@ -970,21 +387,6 @@ export default function Orders() {
             </Button>
           );
           break;
-
-          case 'accepted':
-            actions.push(
-              <Button
-                key="assign"
-                size="sm"
-                variant="secondary"
-                onClick={() => openAssignModal(order)}
-                disabled={isUpdating}
-              >
-                <User className="h-4 w-4 mr-1" />
-                Assign Partner
-              </Button>
-            );
-            break;
       }
     } catch (error) {
       console.error('Error generating status actions for order:', order, error);
@@ -1093,10 +495,10 @@ export default function Orders() {
                             <StatusBadge status={order.status || 'pending'} />
                           </TableCell>
                           <TableCell>
-                            {order.deliveryPartner ? (
+                            {order.delivery_partner_name ? (
                               <div className="flex items-center gap-2">
                                 <User className="h-4 w-4" />
-                                <span>{order.deliveryPartner}</span>
+                                <span>{order.delivery_partner_name}</span>
                               </div>
                             ) : (
                               <span className="text-muted-foreground">Not assigned</span>
@@ -1346,72 +748,99 @@ export default function Orders() {
           <DialogHeader>
             <DialogTitle>Assign Delivery Partner</DialogTitle>
             <DialogDescription>
-              Select a delivery partner for order #{selectedOrder?.id}
+              Select from delivery partners who requested order #{selectedOrder?.id}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="delivery-partner">Delivery Partner</Label>
-              <Select
-                value={selectedDeliveryPartner}
-                onValueChange={setSelectedDeliveryPartner}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a delivery partner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {deliveryPartners.map((partner) => (
-                    <SelectItem key={partner._id} value={partner._id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{partner.name}</span>
-                        <Badge variant="outline" className="ml-2">
-                          {partner.current_orders || 0} orders
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {deliveryRequests.length > 0 ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="delivery-partner">Available Delivery Partners</Label>
+                  <Select
+                    value={selectedDeliveryPartner}
+                    onValueChange={setSelectedDeliveryPartner}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select from requested partners" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    {deliveryRequests.map((partner,index) => (
+                      <SelectItem key={`${partner.id}-${index}`} value={partner.id}>
+                        <div className="flex flex-col">
+                          <div className="flex items-center justify-between w-full">
+                            <span className="font-medium">{partner.name}</span>
+                            {/* <Badge variant="outline" className="ml-2">
+                              {partner.current_orders || 0} orders
+                            </Badge> */}
+                          </div>
+                          {/* <span className="text-xs text-muted-foreground">
+                            {partner.phone || partner.email}
+                          </span> */}
+                        </div>
+                      </SelectItem>
+                    ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Showing {deliveryRequests.length} delivery partner(s) who requested this order
+                  </p>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="assignment-notes">Notes (optional)</Label>
-              <Textarea
-                id="assignment-notes"
-                placeholder="Add any notes about the assignment..."
-                value={statusNotes}
-                onChange={(e) => setStatusNotes(e.target.value)}
-                disabled={isUpdating}
-              />
-            </div>
+                {/* <div className="space-y-2">
+                  <Label htmlFor="assignment-notes">Assignment Notes (optional)</Label>
+                  <Textarea
+                    id="assignment-notes"
+                    placeholder="Add any notes about the assignment..."
+                    value={statusNotes}
+                    onChange={(e) => setStatusNotes(e.target.value)}
+                    disabled={isUpdating}
+                  />
+                </div> */}
 
-            <div className="flex justify-end gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setShowAssignModal(false)}
-                disabled={isUpdating}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={() => handleAssignDeliveryPartner(selectedOrder?.id)}
-                disabled={isUpdating || !selectedDeliveryPartner}
-              >
-                {isUpdating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Assigning...
-                  </>
-                ) : (
-                  <>
-                    <Truck className="mr-2 h-4 w-4" />
-                    Assign Partner
-                  </>
-                )}
-              </Button>
-            </div>
+                <div className="flex justify-end gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setShowAssignModal(false)}
+                    disabled={isUpdating}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => handleAssignDeliveryPartner(selectedOrder?.id)}
+                    disabled={isUpdating || !selectedDeliveryPartner}
+                  >
+                    {isUpdating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Assigning...
+                      </>
+                    ) : (
+                      <>
+                        <Truck className="mr-2 h-4 w-4" />
+                        Assign Partner
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground mb-2">No delivery requests found</p>
+                <p className="text-sm text-muted-foreground">
+                  No delivery partners have requested this order yet. Please wait for requests or check back later.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => setShowAssignModal(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

@@ -101,7 +101,7 @@ async def get_assigned_orders_for_delivery(
             "orders",
             {
                 "delivery_partner": ObjectId(current_user.id),
-                "order_status": "assigned"
+                "order_status": {"$in":["assigned","out_for_delivery"]}
             },
             sort=[("created_at", -1)]
         )
@@ -317,7 +317,6 @@ async def mark_order_as_delivered(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied. Only delivery partners can mark orders as delivered."
             )
-        
         # Validate order_id
         try:
             order_object_id = ObjectId(order_id)
@@ -326,13 +325,12 @@ async def mark_order_as_delivered(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid order ID format"
             )
-        
         # Check if order exists and is assigned to this delivery partner
         order = await db.find_one("orders", {
             "_id": order_object_id,
             "delivery_partner": ObjectId(current_user.id)
         })
-        
+      
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -353,7 +351,7 @@ async def mark_order_as_delivered(
             {
                 "$set": {
                     "order_status": "delivered",
-                    "delivered_at": db.get_current_datetime()
+                    "delivered_at": datetime.utcnow()
                 }
             }
         )

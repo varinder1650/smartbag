@@ -69,11 +69,11 @@ interface UpdatePhoneResult {
 
 interface UpdateProfileData {
   name?: string;
-  phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
+  // phone?: string;
+  // address?: string;
+  // city?: string;
+  // state?: string;
+  // pincode?: string;
 }
 
 interface UpdateProfileResult {
@@ -379,6 +379,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const updateProfile = async (updatedData: UpdateProfileData): Promise<UpdateProfileResult> => {
     try {
+      console.log(JSON.stringify(updatedData))
       const response = await fetch(API_ENDPOINTS.PROFILE, {
         method: 'PUT',
         headers: {

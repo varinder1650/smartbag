@@ -20,12 +20,12 @@ export default function ProfileManagementScreen() {
   
   const [formData, setFormData] = useState({
     name: user?.name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
-    address: user?.address || '',
-    city: user?.city || '',
-    state: user?.state || '',
-    pincode: user?.pincode || '',
+    // email: user?.email || '',
+    // phone: user?.phone || '',
+    // address: user?.address || '',
+    // city: user?.city || '',
+    // state: user?.state || '',
+    // pincode: user?.pincode || '',
   });
 
   const handleUpdateProfile = async () => {

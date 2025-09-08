@@ -5,7 +5,7 @@ from db.db_manager import get_database
 import logging
 from admin.handlers.products import send_products, create_product, delete_product, update_product
 from admin.handlers.brand import send_brands, create_brand, update_brand, delete_brand
-from admin.handlers.orders import send_orders,update_order_status
+from admin.handlers.orders import send_orders,update_order_status,get_delivery_requests_for_order,assign_delivery_partner
 from admin.handlers.category import send_categories, create_categories, update_category, delete_category
 from admin.handlers.customers import send_customers
 from admin.handlers.help import get_tickets
@@ -238,6 +238,12 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
             # Order status handler (placeholder)
             elif msg_type == "update_order_status":
                 await update_order_status(websocket,message.get("data"),user_info,db)
+
+            elif msg_type == "get_delivery_requests_for_order":
+                await get_delivery_requests_for_order(websocket,message.get("data"),db)
+
+            elif msg_type == "assign_delivery_partner":
+                await assign_delivery_partner(websocket,message.get("data"),db)
 
             elif msg_type == "get_help_tickets":
                 await get_tickets(websocket,message.get("filters",{}),db)
