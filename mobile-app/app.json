@@ -14,7 +14,7 @@
       "**/*"
     ],
     "extra": {
-      "EXPO_PUBLIC_API_URL": "http://10.0.0.87:8000/api/",
+      "EXPO_PUBLIC_API_URL": "http://10.0.0.88:8000/api/",
       "EXPO_PUBLIC_OLA_KRUTRIM_API_KEY": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ",
       "eas": {
         "projectId": "your-project-id-here"
@@ -29,7 +29,7 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSExceptionDomains": {
-            "10.0.0.87": {
+            "10.0.0.88": {
               "NSExceptionAllowsInsecureHTTPLoads": true
             },
             "localhost": {

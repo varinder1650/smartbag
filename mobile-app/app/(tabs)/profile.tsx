@@ -80,6 +80,12 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push('/(tabs)')}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
         <Text style={styles.title}>Profile</Text>
       </View>
 
@@ -152,6 +158,12 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 16,
+    padding: 4,
   },
   title: {
     fontSize: 24,
@@ -211,4 +223,4 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.7,
   },
-}); 
+});

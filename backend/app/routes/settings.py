@@ -10,8 +10,8 @@ async def get_public_settings(db: DatabaseManager = Depends(get_database)):
     """Get public app settings"""
     try:
         # Get app settings from database
-        settings = await db.find_one("app_settings", {"type": "public"})
-        
+        settings = await db.find_one("pricing_config", {})
+        # print(settings)
         if not settings:
             # Return default settings if none exist
             default_settings = {
@@ -35,7 +35,7 @@ async def get_public_settings(db: DatabaseManager = Depends(get_database)):
         
         # Remove sensitive data if any
         settings.pop("_id", None)
-        settings.pop("type", None)
+        # settings.pop("type", None)
         
         return settings
 

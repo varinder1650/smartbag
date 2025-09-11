@@ -319,6 +319,12 @@ const CartScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push('/(tabs)')}
+          >
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Shopping Cart</Text>
           <Text style={styles.itemCount}>0 items</Text>
         </View>
@@ -342,6 +348,12 @@ const CartScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push('/(tabs)')}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Shopping Cart</Text>
         <Text style={styles.itemCount}>
           {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
@@ -422,16 +434,22 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 16,
+    padding: 4,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+    flex: 1,
   },
   itemCount: {
     fontSize: 14,
     color: '#666',
-    marginTop: 4,
   },
   emptyContainer: {
     flex: 1,

@@ -47,7 +47,7 @@ export default function CheckoutScreen() {
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState<AddressData | null>(null);
-  const [settings, setSettings] = useState<{ appFee: number; deliveryCharge: number; gstRate: number } | null>(null);
+  const [settings, setSettings] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState('cod');
 
   // Load initial data
@@ -73,11 +73,8 @@ export default function CheckoutScreen() {
       const settingsResponse = await fetch(API_ENDPOINTS.SETTINGS);
       if (settingsResponse.ok) {
         const settingsData = await settingsResponse.json();
-        setSettings({
-          appFee: settingsData.appFee || 0,
-          deliveryCharge: settingsData.deliveryCharge || 0,
-          gstRate: settingsData.gstRate || 0,
-        });
+        // console.log(settingsData)
+        setSettings(settingsData);
       }
       
     } catch (error) {
@@ -116,14 +113,44 @@ export default function CheckoutScreen() {
 
   const getTax = () => {
     if (!settings) return 0;
-    return getSubtotal() * (settings.gstRate / 100);
+    return getSubtotal() * (settings.tax_rate / 100);
+  };
+
+  const getDeliveryCharge = () => {
+    if (!settings || !settings.delivery_fee) return 0;
+    const subtotal = getSubtotal();
+    
+    // Check if eligible for free delivery
+    if (subtotal >= settings.delivery_fee.free_delivery_threshold) {
+      return 0;
+    }
+    
+    // Return base fee for fixed type
+    if (settings.delivery_fee.type === 'fixed') {
+      return settings.delivery_fee.base_fee;
+    }
+    
+    return settings.delivery_fee.base_fee;
+  };
+
+  const getAppFee = () => {
+    if (!settings || !settings.app_fee) return 0;
+    const subtotal = getSubtotal();
+    
+    if (settings.app_fee.type === 'percentage') {
+      const calculatedFee = subtotal * (settings.app_fee.value / 100);
+      return Math.max(settings.app_fee.min_fee, Math.min(calculatedFee, settings.app_fee.max_fee));
+    }
+    
+    return settings.app_fee.value;
   };
 
   const getTotal = () => {
-    if (!settings) return getSubtotal();
     const subtotal = getSubtotal();
     const tax = getTax();
-    return subtotal + tax + settings.deliveryCharge + settings.appFee;
+    const deliveryCharge = getDeliveryCharge();
+    const appFee = getAppFee();
+    return subtotal + tax + deliveryCharge + appFee;
   };
 
   const handleSelectAddress = () => {
@@ -174,8 +201,8 @@ export default function CheckoutScreen() {
         payment_method: paymentMethod,
         subtotal: getSubtotal(),
         tax: getTax(),
-        delivery_charge: settings?.deliveryCharge || 0,
-        app_fee: settings?.appFee || 0,
+        delivery_charge: getDeliveryCharge(),
+        app_fee: getAppFee(),
         total_amount: getTotal(),
       };
       console.log(orderData)
@@ -309,22 +336,29 @@ export default function CheckoutScreen() {
           
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Subtotal</Text>
-            <Text style={styles.priceValue}>₹{getSubtotal()}</Text>
+            <Text style={styles.priceValue}>₹{getSubtotal().toFixed(2)}</Text>
           </View>
           
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Tax ({settings ? settings.gstRate : 0}% GST)</Text>
+            <Text style={styles.priceLabel}>Tax ({settings ? settings.tax_rate : 0}% GST)</Text>
             <Text style={styles.priceValue}>₹{getTax().toFixed(2)}</Text>
           </View>
           
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Delivery Charge</Text>
-            <Text style={styles.priceValue}>₹{settings ? settings.deliveryCharge : 0}</Text>
+            <Text style={styles.priceLabel}>
+              Delivery Charge
+              {getSubtotal() >= (settings?.delivery_fee?.free_delivery_threshold || 0) && 
+                <Text style={styles.freeDeliveryText}> (Free)</Text>
+              }
+            </Text>
+            <Text style={styles.priceValue}>₹{getDeliveryCharge().toFixed(2)}</Text>
           </View>
           
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>App Fee</Text>
-            <Text style={styles.priceValue}>₹{settings ? settings.appFee : 0}</Text>
+            <Text style={styles.priceLabel}>
+              App Fee ({settings?.app_fee?.type === 'percentage' ? `${settings.app_fee.value}%` : 'Fixed'})
+            </Text>
+            <Text style={styles.priceValue}>₹{getAppFee().toFixed(2)}</Text>
           </View>
           
           <View style={[styles.priceRow, styles.totalRow]}>
@@ -510,6 +544,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+  freeDeliveryText: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
   totalRow: {
     borderTopWidth: 1,

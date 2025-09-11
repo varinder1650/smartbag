@@ -54,8 +54,8 @@ class ProductRequestCreate(BaseModel):
     brand: Optional[str] = Field(None, max_length=100)
     category: Optional[str] = Field(None, max_length=100)
     description: str = Field(..., min_length=10, max_length=1000)
-    estimated_price: Optional[float] = Field(None, gt=0)
-    why_needed: str = Field(..., min_length=10, max_length=500)
+    # estimated_price: Optional[float] = Field(None, gt=0)
+    # why_needed: str = Field(..., min_length=10, max_length=500)
 
 class ProductRequestResponse(BaseModel):
     id: str = Field(..., alias="_id")
@@ -66,8 +66,8 @@ class ProductRequestResponse(BaseModel):
     brand: Optional[str] = None
     category: Optional[str] = None
     description: str
-    estimated_price: Optional[float] = None
-    why_needed: str
+    # estimated_price: Optional[float] = None
+    # why_needed: str
     status: ProductRequestStatus = ProductRequestStatus.PENDING
     admin_notes: Optional[str] = None
     votes: int = 0  # Other users can upvote requests

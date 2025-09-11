@@ -31,8 +31,8 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
     brand: '',
     category: '',
     description: '',
-    estimated_price: '',
-    why_needed: '',
+    // estimated_price: '',
+    // why_needed: '',
   });
 
   const handleSubmit = async () => {
@@ -58,10 +58,10 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
       return;
     }
 
-    if (!formData.why_needed.trim() || formData.why_needed.trim().length < 10) {
-      Alert.alert('Error', 'Please explain why you need this product (minimum 10 characters)');
-      return;
-    }
+    // if (!formData.why_needed.trim() || formData.why_needed.trim().length < 10) {
+    //   Alert.alert('Error', 'Please explain why you need this product (minimum 10 characters)');
+    //   return;
+    // }
 
     setLoading(true);
     try {
@@ -70,8 +70,8 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
         brand: formData.brand.trim() || null,
         category: formData.category.trim() || null,
         description: formData.description.trim(),
-        estimated_price: formData.estimated_price ? parseFloat(formData.estimated_price) : null,
-        why_needed: formData.why_needed.trim(),
+        // estimated_price: formData.estimated_price ? parseFloat(formData.estimated_price) : null,
+        // why_needed: formData.why_needed.trim(),
       };
 
       const response = await fetch(`${API_BASE_URL}support/product-requests`, {
@@ -99,8 +99,8 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
                   brand: '',
                   category: '',
                   description: '',
-                  estimated_price: '',
-                  why_needed: '',
+                  // estimated_price: '',
+                  // why_needed: '',
                 });
                 setShowModal(false);
                 onRequestSubmitted?.();
@@ -178,7 +178,7 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
+          {/* <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Estimated Price</Text>
             <TextInput
               style={styles.input}
@@ -187,7 +187,7 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
               placeholder="₹ Optional"
               keyboardType="decimal-pad"
             />
-          </View>
+          </View> */}
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Description *</Text>
@@ -204,7 +204,7 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
             <Text style={styles.charCount}>{formData.description.length}/1000</Text>
           </View>
 
-          <View style={styles.inputGroup}>
+          {/* <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Why do you need this product? *</Text>
             <TextInput
               style={styles.textArea}
@@ -217,7 +217,7 @@ export const RequestProductSection: React.FC<RequestProductSectionProps> = ({ on
               maxLength={500}
             />
             <Text style={styles.charCount}>{formData.why_needed.length}/500</Text>
-          </View>
+          </View> */}
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
