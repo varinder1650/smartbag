@@ -223,7 +223,7 @@ export default function DeliveryScreen() {
               const data = await response.json();
               console.log('Order accepted:', data);
               
-              Alert.alert('Success', 'Order assigned to you!');
+              Alert.alert('Success', 'Order accepted!');
               
               // Refresh orders to update the lists
               await fetchOrders();

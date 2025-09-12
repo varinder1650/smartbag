@@ -28,7 +28,7 @@ async def get_available_orders_for_delivery(
         orders = await db.find_many(
             "orders",
             {
-                "order_status": {"$in" : ["confirmed","preparing","prepared"]}
+                "order_status": {"$in" : ["confirmed","preparing","assigning"]}
             },
             sort=[("created_at", -1)]
         )
@@ -267,7 +267,7 @@ async def accept_delivery_order(
             )
         
         # Check if order status allows assignment
-        if order.get("order_status") not in ["confirmed","preparing","prepared"]:
+        if order.get("order_status") not in ["confirmed","preparing","assigning"]:
             logger.error("can't be assigned")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

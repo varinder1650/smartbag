@@ -30,7 +30,7 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
         
         # Get orders
         orders = await db.find_many("orders", query, sort=[("created_at", -1)], limit=100)
-        
+        # print(orders)
         # Serialize orders and add frontend-friendly field mappings
         serialized_orders = []
         for order in orders:
@@ -43,11 +43,15 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
                     product = await db.find_one("products",{"_id": id})
                     item["product_name"] = product["name"]
                     item["product_image"] = product["images"]
+                
+                delivery_partner_name = None
                 if order["delivery_partner"]:
                     delivery_partner = await db.find_one("users", {"_id":order["delivery_partner"]})
-                    order["delivery_partner_name"] = delivery_partner['name']
+                    delivery_partner_name = delivery_partner.get("name")
+                    order["delivery_partner_name"] = delivery_partner_name
                 serialized_order = serialize_document(order)
-                serialized_order["delivery_partner_name"] = delivery_partner['name']
+                # serialized_order["delivery_partner_name"] = delivery_partner['name']
+                serialized_order["delivery_partner_name"] = delivery_partner_name
                 serialized_order["user_name"] = user["name"]
                 serialized_order["user_email"] = user["email"]
                 serialized_order["user_phone"] = user["phone"]
@@ -63,7 +67,7 @@ async def send_orders(websocket: WebSocket, filters: dict, db):
             except Exception as serialize_error:
                 logger.error(f"Error serializing order {order.get('_id')}: {serialize_error}")
                 continue
-        
+        # print(serialized_orders)
         logger.info(f"Sending {len(serialized_orders)} serialized orders")
 
         await websocket.send_json({

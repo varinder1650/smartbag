@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { wsService } from "@/services/websocket";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Eye, Truck, Clock, CheckCircle, Package, Loader2, User, Calendar, MapPin, ExternalLink } from "lucide-react";
+import { Search, Eye, Truck, Clock, CheckCircle, Package, Loader2, User, Calendar, MapPin, ExternalLink, RefreshCw } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 interface DeliveryPartner {
@@ -67,6 +67,7 @@ export default function Orders() {
   const [statusNotes, setStatusNotes] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderStatusHistory, setOrderStatusHistory] = useState<OrderStatusHistory[]>([]);
 
   const statusOptions = [
@@ -81,6 +82,32 @@ export default function Orders() {
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
   ];
+
+  const handleRefresh = () => {
+    console.log('Manual refresh triggered');
+    setIsRefreshing(true);
+    
+    if (wsService.isConnected()) {
+      wsService.send({
+        type: 'get_orders',
+        filters: {}
+      });
+    } else {
+      setTimeout(() => {
+        if (wsService.isConnected()) {
+          wsService.send({
+            type: 'get_orders',
+            filters: {}
+          });
+        }
+      }, 2000);
+    }
+
+    toast({
+      title: "Refreshing Orders",
+      description: "Loading latest order data...",
+    });
+  };
 
   // Request initial data and set up real-time handlers
   useEffect(() => {
@@ -118,10 +145,12 @@ export default function Orders() {
         const ordersArray = Array.isArray(data.orders) ? data.orders : [];
         setOrders(ordersArray);
         setIsLoading(false);
+        setIsRefreshing(false);
       } catch (error) {
         console.error('Error processing orders data:', error);
         setOrders([]);
         setIsLoading(false);
+        setIsRefreshing(false);
       }
     };
 
@@ -167,6 +196,7 @@ export default function Orders() {
       console.error('Orders WebSocket error:', data);
       setIsLoading(false);
       setIsUpdating(false);
+      setIsRefreshing(false);
       
       if (!data.message?.includes('Unknown message type') && 
           !data.message?.includes('not implemented')) {
@@ -304,10 +334,10 @@ export default function Orders() {
     setSelectedOrder(order);
     
     // Fetch order status history
-    wsService.send({
-      type: 'get_order_status_history',
-      data: { order_id: order.id }
-    });
+    // wsService.send({
+    //   type: 'get_order_status_history',
+    //   data: { order_id: order.id }
+    // });
     
     setShowOrderDrawer(true);
   };
@@ -363,9 +393,9 @@ export default function Orders() {
         case 'preparing':
           actions.push(
             <Button
-              key="prepared"
+              key="assigning"
               size="sm"
-              onClick={() => handleStatusChange(order.id, 'prepared')}
+              onClick={() => handleStatusChange(order.id, 'assigning')}
               disabled={isUpdating}
             >
               <CheckCircle className="h-4 w-4 mr-1" />
@@ -373,7 +403,7 @@ export default function Orders() {
             </Button>
           );
           break;
-        case 'accepted': // Changed from 'prepared' to 'accepted'
+        case 'accepted': // Changed from 'assigning' to 'accepted'
           actions.push(
             <Button
               key="assign"
@@ -451,6 +481,15 @@ export default function Orders() {
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isLoading || isRefreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -513,7 +552,7 @@ export default function Orders() {
                           </TableCell>
                           <TableCell>
                             {order.created_at ? (
-                              format(parseISO(order.created_at), "HH:mm")
+                              format(parseISO(order.created_at), "HH:mm:ss")
                             ) : (
                               <span className="text-muted-foreground">N/A</span>
                             )}
@@ -560,7 +599,7 @@ export default function Orders() {
 
       {/* Order Details Drawer */}
       <Sheet open={showOrderDrawer} onOpenChange={setShowOrderDrawer}>
-        <SheetContent className="w-[600px] sm:w-[800px]">
+        <SheetContent className="w-[800px] sm:w-[1000px] flex flex-col">
           <SheetHeader>
             <SheetTitle>Order Details - #{selectedOrder?.id || 'N/A'}</SheetTitle>
             <SheetDescription>
@@ -569,7 +608,7 @@ export default function Orders() {
           </SheetHeader>
           
           {selectedOrder && (
-            <div className="space-y-6 py-6">
+            <div className="lex-1 overflow-y-auto space-y-6 py-6 ">
               {/* Order Summary */}
               <Card>
                 <CardHeader>
@@ -578,14 +617,14 @@ export default function Orders() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p><strong>Order ID:</strong> #{selectedOrder.id}</p>
+                      {/* <p><strong>Order ID:</strong> #{selectedOrder.id}</p> */}
                       <p><strong>Customer:</strong> {selectedOrder.user_name || 'N/A'}</p>
                       <p><strong>Status:</strong> <StatusBadge status={selectedOrder.status || 'pending'} /></p>
                     </div>
                     <div>
                       <p><strong>Total:</strong> ₹{selectedOrder.total || '0.00'}</p>
-                      <p><strong>Created:</strong> {selectedOrder.created_at ? format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm") : 'N/A'}</p>
-                      <p><strong>Delivery Partner:</strong> {selectedOrder.deliveryPartner || "Not assigned"}</p>
+                      <p><strong>Created:</strong> {selectedOrder.created_at ? format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm:ss") : 'N/A'}</p>
+                      <p><strong>Delivery Partner:</strong> {selectedOrder.delivery_partner_name || "Not assigned"}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -611,7 +650,7 @@ export default function Orders() {
                                 Status changed to <StatusBadge status={history.status} />
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {format(new Date(history.timestamp), "MMM dd, HH:mm")}
+                                {format(new Date(history.timestamp), "MMM dd, HH:mm:ss")}
                               </p>
                             </div>
                             <p className="text-sm text-muted-foreground">
@@ -870,7 +909,7 @@ export default function Orders() {
                       <p><strong>Phone:</strong> {selectedOrder.user_phone || 'N/A'}</p>
                       <p><strong>Order Date:</strong> {
                         selectedOrder.created_at ? 
-                          format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm") : 
+                          format(new Date(selectedOrder.created_at), "MMM dd, yyyy HH:mm:ss") : 
                           'N/A'
                       }</p>
                       <p><strong>Total:</strong> ₹{selectedOrder.total || '0.00'}</p>

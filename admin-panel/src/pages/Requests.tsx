@@ -54,6 +54,7 @@ interface UserSuggestion {
   status: string;
   user_name: string;
   user_email: string;
+  phone: string;
   created_at: string;
   updated_at: string;
   admin_notes?: string;
@@ -392,7 +393,7 @@ export default function UserSuggestions() {
                       <TableHead>Title</TableHead>
                       <TableHead>User</TableHead>
                       <TableHead>Category</TableHead>
-                      <TableHead>Votes</TableHead>
+                      {/* <TableHead>Votes</TableHead> */}
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Actions</TableHead>
@@ -403,8 +404,8 @@ export default function UserSuggestions() {
                       <TableRow key={suggestion._id || suggestion.id} className="cursor-pointer hover:bg-muted/50">
                         <TableCell>
                           <div className="max-w-xs">
-                            <p className="font-medium truncate" title={suggestion.title}>
-                              {suggestion.title}
+                            <p className="font-medium truncate" title={suggestion.product_name}>
+                              {suggestion.product_name}
                             </p>
                             <p className="text-sm text-muted-foreground truncate" title={suggestion.description}>
                               {suggestion.description}
@@ -423,7 +424,7 @@ export default function UserSuggestions() {
                             {categoryOptions.find(opt => opt.value === suggestion.category)?.label || suggestion.category}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        {/* <TableCell>
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1">
                               <ThumbsUp className="h-4 w-4 text-green-500" />
@@ -437,7 +438,7 @@ export default function UserSuggestions() {
                               ({getVoteScore(suggestion) >= 0 ? '+' : ''}{getVoteScore(suggestion)})
                             </div>
                           </div>
-                        </TableCell>
+                        </TableCell> */}
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {getStatusIcon(suggestion.status)}
@@ -549,6 +550,7 @@ export default function UserSuggestions() {
                   <CardTitle className="text-lg">{selectedSuggestion.title}</CardTitle>
                   <CardDescription className="flex items-center gap-4">
                     <span>By {selectedSuggestion.user_name} ({selectedSuggestion.user_email})</span>
+                    <span>Phone: {selectedSuggestion.phone}</span>
                     <Badge variant="outline">
                       {categoryOptions.find(opt => opt.value === selectedSuggestion.category)?.label || selectedSuggestion.category}
                     </Badge>
@@ -558,6 +560,10 @@ export default function UserSuggestions() {
                 <CardContent>
                   <div className="space-y-4">
                     <div>
+                      <h4 className="font-medium mb-2">Product Name</h4>
+                      <p className="text-muted-foreground leading-relaxed">
+                        {selectedSuggestion.product_name}
+                      </p>
                       <h4 className="font-medium mb-2">Description</h4>
                       <p className="text-muted-foreground leading-relaxed">
                         {selectedSuggestion.description}
@@ -565,7 +571,7 @@ export default function UserSuggestions() {
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
-                      <div>
+                      {/* <div>
                         <h4 className="font-medium mb-2">Community Votes</h4>
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-1">
@@ -580,7 +586,7 @@ export default function UserSuggestions() {
                             Score: {getVoteScore(selectedSuggestion)}
                           </div>
                         </div>
-                      </div>
+                      </div> */}
 
                       <div>
                         <h4 className="font-medium mb-2">Current Status</h4>
