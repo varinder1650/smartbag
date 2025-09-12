@@ -739,7 +739,7 @@ export default function AddressScreen() {
                 </View>
               )}
 
-              {isFromCheckout && selectedAddress && (
+              {selectedAddress && (
                 <TouchableOpacity 
                   style={styles.selectButton}
                   onPress={() => selectAndSetDefault(selectedAddress)}

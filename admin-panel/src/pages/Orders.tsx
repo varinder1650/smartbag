@@ -69,6 +69,25 @@ export default function Orders() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderStatusHistory, setOrderStatusHistory] = useState<OrderStatusHistory[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  
+
+  const indexOfLastRow = currentPage * rowsPerPage;
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+  const filteredOrders2 =
+    statusFilter === "all"
+      ? orders
+      : orders.filter((order) => order.status === statusFilter);
+
+  const currentOrders = filteredOrders2.slice(indexOfFirstRow, indexOfLastRow);
+  const totalPages = Math.ceil(filteredOrders2.length / rowsPerPage);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
 
   const statusOptions = [
     { value: "all", label: "All Orders" },
@@ -514,75 +533,77 @@ export default function Orders() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOrders.length > 0 ? filteredOrders.map((order) => {
-                    try {
-                      return (
-                        <TableRow key={order._id || order.id}>
-                          <TableCell className="font-medium">
-                            <Button 
-                              variant="link" 
-                              className="p-0 h-auto text-blue-600 hover:text-blue-800"
-                              onClick={() => handleViewOrderDetails(order)}
-                            >
-                              #{order.id || 'N/A'}
-                              <ExternalLink className="h-3 w-3 ml-1" />
-                            </Button>
-                          </TableCell>
-                          <TableCell>{order.user_name || 'Unknown'}</TableCell>
-                          <TableCell>₹{order.total || '0.00'}</TableCell>
-                          <TableCell>
-                            <StatusBadge status={order.status || 'pending'} />
-                          </TableCell>
-                          <TableCell>
-                            {order.delivery_partner_name ? (
-                              <div className="flex items-center gap-2">
-                                <User className="h-4 w-4" />
-                                <span>{order.delivery_partner_name}</span>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground">Not assigned</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {order.created_at ? (
-                              format(parseISO(order.created_at), "MMM dd, yyyy")
-                            ) : (
-                              <span className="text-muted-foreground">N/A</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {order.created_at ? (
-                              format(parseISO(order.created_at), "HH:mm:ss")
-                            ) : (
-                              <span className="text-muted-foreground">N/A</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleViewOrder(order)}
-                                disabled={isUpdating}
+                  {currentOrders.length > 0 ? (
+                    currentOrders.map((order) => {
+                      try {
+                        return (
+                          <TableRow key={order._id || order.id}>
+                            <TableCell className="font-medium">
+                              <Button 
+                                variant="link" 
+                                className="p-0 h-auto text-blue-600 hover:text-blue-800"
+                                onClick={() => handleViewOrderDetails(order)}
                               >
-                                <Eye className="h-4 w-4" />
+                                #{order.id || 'N/A'}
+                                <ExternalLink className="h-3 w-3 ml-1" />
                               </Button>
-                              {getStatusActions(order)}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    } catch (error) {
-                      console.error('Error rendering order row:', order, error);
-                      return (
-                        <TableRow key={`error-${order._id || order.id || Math.random()}`}>
-                          <TableCell colSpan={8} className="text-center text-muted-foreground">
-                            Error displaying order data
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
-                  }) : (
+                            </TableCell>
+                            <TableCell>{order.user_name || 'Unknown'}</TableCell>
+                            <TableCell>₹{order.total || '0.00'}</TableCell>
+                            <TableCell>
+                              <StatusBadge status={order.status || 'pending'} />
+                            </TableCell>
+                            <TableCell>
+                              {order.delivery_partner_name ? (
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4" />
+                                  <span>{order.delivery_partner_name}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Not assigned</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {order.created_at ? (
+                                format(parseISO(order.created_at), "MMM dd, yyyy")
+                              ) : (
+                                <span className="text-muted-foreground">N/A</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {order.created_at ? (
+                                format(parseISO(order.created_at), "HH:mm:ss")
+                              ) : (
+                                <span className="text-muted-foreground">N/A</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleViewOrder(order)}
+                                  disabled={isUpdating}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                {getStatusActions(order)}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      } catch (error) {
+                        console.error('Error rendering order row:', order, error);
+                        return (
+                          <TableRow key={`error-${order._id || order.id || Math.random()}`}>
+                            <TableCell colSpan={8} className="text-center text-muted-foreground">
+                              Error displaying order data
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                    })
+                  ) : (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-8">
                         <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -592,6 +613,39 @@ export default function Orders() {
                   )}
                 </TableBody>
               </Table>
+
+              {/* Pagination Controls */}
+              {filteredOrders2.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {indexOfFirstRow + 1}–{Math.min(indexOfLastRow, filteredOrders2.length)} of {filteredOrders2.length} orders
+                  </p>
+
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+
+                    <span className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -608,7 +662,7 @@ export default function Orders() {
           </SheetHeader>
           
           {selectedOrder && (
-            <div className="lex-1 overflow-y-auto space-y-6 py-6 ">
+            <div className="flex-1 overflow-y-auto space-y-6 py-6">
               {/* Order Summary */}
               <Card>
                 <CardHeader>
@@ -617,7 +671,6 @@ export default function Orders() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      {/* <p><strong>Order ID:</strong> #{selectedOrder.id}</p> */}
                       <p><strong>Customer:</strong> {selectedOrder.user_name || 'N/A'}</p>
                       <p><strong>Status:</strong> <StatusBadge status={selectedOrder.status || 'pending'} /></p>
                     </div>
