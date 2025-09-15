@@ -7,6 +7,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,7 @@ interface CartItem {
     price: number;
     images: string[];
     brand: { name: string };
+    stock: number;
   };
   quantity: number;
 }
@@ -32,12 +34,23 @@ interface Coordinates{
 }
 
 interface AddressData {
+  _id?: string;
   address: string;
   city: string;
   state: string;
   pincode: string;
   fullAddress: string;
-  coordinates: Coordinates;
+  coordinates?: Coordinates;
+  is_default?: boolean;
+}
+
+interface PromoCode {
+  code: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  min_order_amount?: number;
+  max_discount?: number;
+  is_active: boolean;
 }
 
 export default function CheckoutScreen() {
@@ -49,6 +62,13 @@ export default function CheckoutScreen() {
   const [deliveryAddress, setDeliveryAddress] = useState<AddressData | null>(null);
   const [settings, setSettings] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState('cod');
+  const [updatingQuantity, setUpdatingQuantity] = useState<{[key: string]: boolean}>({});
+  
+  // Promo code states
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoDiscount, setPromoDiscount] = useState(0);
 
   // Load initial data
   useEffect(() => {
@@ -73,8 +93,12 @@ export default function CheckoutScreen() {
       const settingsResponse = await fetch(API_ENDPOINTS.SETTINGS);
       if (settingsResponse.ok) {
         const settingsData = await settingsResponse.json();
-        // console.log(settingsData)
         setSettings(settingsData);
+      }
+      
+      // Auto-load default address if not coming from address selection
+      if (!params.address) {
+        await loadDefaultAddress();
       }
       
     } catch (error) {
@@ -84,7 +108,57 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Handle address parameters - simple approach
+  // Function to load default address
+  const loadDefaultAddress = async () => {
+    try {
+      const addressResponse = await fetch(`${API_BASE_URL}address/my`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (addressResponse.ok) {
+        const addressData = await addressResponse.json();
+        // console.log('Address data received:', addressData);
+        
+        let addresses = [];
+        if (Array.isArray(addressData)) {
+          addresses = addressData;
+        } else if (addressData.addresses && Array.isArray(addressData.addresses)) {
+          addresses = addressData.addresses;
+        } else if (addressData.address) {
+          addresses = [addressData.address];
+        }
+        
+        // Find default address or use first one
+        const defaultAddress = addresses.find(addr => addr.is_default) || addresses[0];
+        // console.log(defaultAddress)
+        if (defaultAddress) {
+          const addressParts = [];
+          if (defaultAddress.address) addressParts.push(defaultAddress.address);
+          if (defaultAddress.city) addressParts.push(defaultAddress.city);
+          if (defaultAddress.state) addressParts.push(defaultAddress.state);
+          if (defaultAddress.pincode) addressParts.push(defaultAddress.pincode);
+          
+          setDeliveryAddress({
+            _id: defaultAddress._id,
+            address: addressParts.join(', '),
+            city: defaultAddress.city || '',
+            state: defaultAddress.state || '',
+            pincode: defaultAddress.pincode || '',
+            fullAddress: addressParts.join(', '),
+            coordinates: defaultAddress.coordinates,
+            is_default: defaultAddress.is_default,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading default address:', error);
+    }
+  };
+
+  // Handle address parameters from address selection
   useEffect(() => {
     const addressFromParams = params.address as string;
     const fullAddressFromParams = params.fullAddress as string;
@@ -104,8 +178,155 @@ export default function CheckoutScreen() {
         : undefined,
       });
     }
-  }, [params.address, params.fullAddress, params.city, params.state, params.pincode,params.latitude,
-    params.longitude]);
+  }, [params.address, params.fullAddress, params.city, params.state, params.pincode, params.latitude, params.longitude]);
+
+  // Function to update cart item quantity
+  const updateCartQuantity = async (itemId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      // Remove item from cart
+      Alert.alert(
+        'Remove Item',
+        'Are you sure you want to remove this item from your cart?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Remove', 
+            style: 'destructive',
+            onPress: () => removeCartItem(itemId)
+          }
+        ]
+      );
+      return;
+    }
+
+    // Check stock availability
+    const cartItem = cartItems.find(item => item._id === itemId);
+    if (cartItem && newQuantity > cartItem.product.stock) {
+      Alert.alert('Stock Limit', `Only ${cartItem.product.stock} items available in stock`);
+      return;
+    }
+
+    setUpdatingQuantity(prev => ({ ...prev, [itemId]: true }));
+
+    try {
+      const response = await fetch(API_ENDPOINTS.CART_UPDATE, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ itemId, quantity: newQuantity }),
+      });
+
+      if (response.ok) {
+        // Update local state
+        setCartItems(prevItems =>
+          prevItems.map(item =>
+            item._id === itemId ? { ...item, quantity: newQuantity } : item
+          )
+        );
+      } else {
+        const errorData = await response.json();
+        Alert.alert('Error', errorData.message || 'Failed to update quantity');
+      }
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      Alert.alert('Error', 'Failed to update quantity');
+    } finally {
+      setUpdatingQuantity(prev => ({ ...prev, [itemId]: false }));
+    }
+  };
+
+  const removeCartItem = async (itemId: string) => {
+    setUpdatingQuantity(prev => ({ ...prev, [itemId]: true }));
+
+    try {
+      const response = await fetch(`${API_ENDPOINTS.CART_REMOVE}?item_id=${itemId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setCartItems(prevItems => prevItems.filter(item => item._id !== itemId));
+      } else {
+        const errorData = await response.json();
+        Alert.alert('Error', errorData.message || 'Failed to remove item');
+      }
+    } catch (error) {
+      console.error('Error removing item:', error);
+      Alert.alert('Error', 'Failed to remove item');
+    } finally {
+      setUpdatingQuantity(prev => ({ ...prev, [itemId]: false }));
+    }
+  };
+
+  // Promo code functions
+  const applyPromoCode = async () => {
+    if (!promoCode.trim()) {
+      Alert.alert('Error', 'Please enter a promo code');
+      return;
+    }
+
+    setPromoLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}promocodes/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          code: promoCode.trim().toUpperCase(),
+          order_amount: getSubtotal(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.valid) {
+        setAppliedPromo(data.promocode);
+        calculatePromoDiscount(data.promocode);
+        Alert.alert('Success', 'Promo code applied successfully!');
+      } else {
+        Alert.alert('Error', data.message || 'Invalid promo code');
+        setAppliedPromo(null);
+        setPromoDiscount(0);
+      }
+    } catch (error) {
+      console.error('Error applying promo code:', error);
+      Alert.alert('Error', 'Failed to apply promo code');
+      setAppliedPromo(null);
+      setPromoDiscount(0);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const removePromoCode = () => {
+    setPromoCode('');
+    setAppliedPromo(null);
+    setPromoDiscount(0);
+  };
+
+  const calculatePromoDiscount = (promo: PromoCode) => {
+    const subtotal = getSubtotal();
+    let discount = 0;
+
+    if (promo.discount_type === 'percentage') {
+      discount = subtotal * (promo.discount_value / 100);
+      if (promo.max_discount) {
+        discount = Math.min(discount, promo.max_discount);
+      }
+    } else {
+      discount = promo.discount_value;
+    }
+
+    setPromoDiscount(discount);
+  };
 
   const getSubtotal = () => {
     return cartItems.reduce((total, item) => total + (item.product.price * item.quantity), 0);
@@ -113,7 +334,8 @@ export default function CheckoutScreen() {
 
   const getTax = () => {
     if (!settings) return 0;
-    return getSubtotal() * (settings.tax_rate / 100);
+    const taxableAmount = getSubtotal() - promoDiscount;
+    return taxableAmount * (settings.tax_rate / 100);
   };
 
   const getDeliveryCharge = () => {
@@ -135,7 +357,7 @@ export default function CheckoutScreen() {
 
   const getAppFee = () => {
     if (!settings || !settings.app_fee) return 0;
-    const subtotal = getSubtotal();
+    const subtotal = getSubtotal() - promoDiscount;
     
     if (settings.app_fee.type === 'percentage') {
       const calculatedFee = subtotal * (settings.app_fee.value / 100);
@@ -150,7 +372,7 @@ export default function CheckoutScreen() {
     const tax = getTax();
     const deliveryCharge = getDeliveryCharge();
     const appFee = getAppFee();
-    return subtotal + tax + deliveryCharge + appFee;
+    return subtotal + tax + deliveryCharge + appFee - promoDiscount;
   };
 
   const handleSelectAddress = () => {
@@ -162,26 +384,22 @@ export default function CheckoutScreen() {
       Alert.alert('Error', 'Please select a delivery address');
       return;
     }
-    console.log("pass the address checkpoint")
 
     if (!token) {
       Alert.alert('Error', 'Please login to place an order');
       return;
     }
-    console.log("passes the token checkpoint")
 
     // Simple validation
     if (!deliveryAddress.address || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.pincode) {
       Alert.alert('Error', 'Please provide complete address information');
       return;
     }
-    console.log("passes the address validation")
 
     if (!paymentMethod) {
       Alert.alert('Error', 'Please select a payment method');
       return;
     }
-    console.log("passess the payment checkpoint")
 
     setPlacingOrder(true);
     try {
@@ -203,9 +421,11 @@ export default function CheckoutScreen() {
         tax: getTax(),
         delivery_charge: getDeliveryCharge(),
         app_fee: getAppFee(),
+        promo_code: appliedPromo?.code || null,
+        promo_discount: promoDiscount,
         total_amount: getTotal(),
       };
-      console.log(orderData)
+
       const response = await fetch(API_ENDPOINTS.ORDERS, {
         method: 'POST',
         headers: {
@@ -287,6 +507,11 @@ export default function CheckoutScreen() {
             <View style={styles.addressCard}>
               <View style={styles.addressInfo}>
                 <Text style={styles.addressText}>{deliveryAddress.fullAddress}</Text>
+                {deliveryAddress.is_default && (
+                  <View style={styles.defaultBadge}>
+                    <Text style={styles.defaultBadgeText}>Default</Text>
+                  </View>
+                )}
               </View>
               <TouchableOpacity 
                 style={styles.changeAddressButton}
@@ -308,7 +533,7 @@ export default function CheckoutScreen() {
           )}
         </View>
 
-        {/* Order Summary */}
+        {/* Order Summary with Quantity Controls */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="list-outline" size={24} color="#007AFF" />
@@ -320,11 +545,94 @@ export default function CheckoutScreen() {
               <View style={styles.orderItemInfo}>
                 <Text style={styles.orderItemName}>{item.product.name}</Text>
                 <Text style={styles.orderItemBrand}>{item.product.brand?.name}</Text>
-                <Text style={styles.orderItemQuantity}>Qty: {item.quantity}</Text>
+                <Text style={styles.orderItemPrice}>₹{item.product.price} each</Text>
+                
+                {/* Quantity Controls */}
+                <View style={styles.quantityControls}>
+                  <TouchableOpacity
+                    style={[styles.quantityButton, updatingQuantity[item._id] && styles.disabledQuantityButton]}
+                    onPress={() => updateCartQuantity(item._id, item.quantity - 1)}
+                    disabled={updatingQuantity[item._id]}
+                  >
+                    <Ionicons name="remove" size={16} color="#007AFF" />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.quantityDisplay}>
+                    {updatingQuantity[item._id] ? (
+                      <ActivityIndicator size="small" color="#007AFF" />
+                    ) : (
+                      <Text style={styles.quantityText}>{item.quantity}</Text>
+                    )}
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.quantityButton, 
+                      (updatingQuantity[item._id] || item.quantity >= item.product.stock) && styles.disabledQuantityButton
+                    ]}
+                    onPress={() => updateCartQuantity(item._id, item.quantity + 1)}
+                    disabled={updatingQuantity[item._id] || item.quantity >= item.product.stock}
+                  >
+                    <Ionicons name="add" size={16} color="#007AFF" />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Text style={styles.orderItemPrice}>₹{item.product.price * item.quantity}</Text>
+              
+              <View style={styles.orderItemRight}>
+                <Text style={styles.orderItemTotal}>₹{item.product.price * item.quantity}</Text>
+                {item.product.stock <= 5 && (
+                  <Text style={styles.stockWarning}>Only {item.product.stock} left</Text>
+                )}
+              </View>
             </View>
           ))}
+        </View>
+
+        {/* Promo Code Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="pricetag-outline" size={24} color="#007AFF" />
+            <Text style={styles.sectionTitle}>Promo Code</Text>
+          </View>
+          
+          {appliedPromo ? (
+            <View style={styles.appliedPromoContainer}>
+              <View style={styles.appliedPromoInfo}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                <View style={styles.appliedPromoText}>
+                  <Text style={styles.appliedPromoCode}>{appliedPromo.code}</Text>
+                  <Text style={styles.appliedPromoDiscount}>
+                    You saved ₹{promoDiscount.toFixed(2)}!
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={removePromoCode}>
+                <Ionicons name="close-circle" size={24} color="#FF6B6B" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.promoInputContainer}>
+              <TextInput
+                style={styles.promoInput}
+                placeholder="Enter promo code"
+                value={promoCode}
+                onChangeText={setPromoCode}
+                autoCapitalize="characters"
+                editable={!promoLoading}
+              />
+              <TouchableOpacity
+                style={[styles.applyPromoButton, promoLoading && styles.disabledButton]}
+                onPress={applyPromoCode}
+                disabled={promoLoading}
+              >
+                {promoLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.applyPromoText}>Apply</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Price Breakdown */}
@@ -338,6 +646,13 @@ export default function CheckoutScreen() {
             <Text style={styles.priceLabel}>Subtotal</Text>
             <Text style={styles.priceValue}>₹{getSubtotal().toFixed(2)}</Text>
           </View>
+          
+          {promoDiscount > 0 && (
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, styles.discountLabel]}>Promo Discount</Text>
+              <Text style={[styles.priceValue, styles.discountValue]}>-₹{promoDiscount.toFixed(2)}</Text>
+            </View>
+          )}
           
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Tax ({settings ? settings.tax_rate : 0}% GST)</Text>
@@ -399,7 +714,7 @@ export default function CheckoutScreen() {
           {placingOrder ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.placeOrderText}>Place Order</Text>
+            <Text style={styles.placeOrderText}>Place Order - ₹{getTotal().toFixed(2)}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -468,6 +783,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  defaultBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  defaultBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   changeAddressButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -502,13 +830,14 @@ const styles = StyleSheet.create({
   orderItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
+    alignItems: 'flex-start',
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
   orderItemInfo: {
     flex: 1,
+    marginRight: 12,
   },
   orderItemName: {
     fontSize: 16,
@@ -520,15 +849,105 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-  orderItemQuantity: {
+  orderItemPrice: {
     fontSize: 14,
     color: '#666',
     marginTop: 2,
   },
-  orderItemPrice: {
+  orderItemRight: {
+    alignItems: 'flex-end',
+  },
+  orderItemTotal: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+  stockWarning: {
+    fontSize: 12,
+    color: '#FF6B6B',
+    marginTop: 4,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f8ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  disabledQuantityButton: {
+    opacity: 0.5,
+  },
+  quantityDisplay: {
+    marginHorizontal: 16,
+    minWidth: 30,
+    alignItems: 'center',
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  promoInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  promoInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#f8f9fa',
+  },
+  applyPromoButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  applyPromoText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  appliedPromoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0fff0',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  appliedPromoInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  appliedPromoText: {
+    marginLeft: 12,
+  },
+  appliedPromoCode: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  appliedPromoDiscount: {
+    fontSize: 14,
+    color: '#4CAF50',
+    marginTop: 2,
   },
   priceRow: {
     flexDirection: 'row',
@@ -544,6 +963,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+  discountLabel: {
+    color: '#4CAF50',
+  },
+  discountValue: {
+    color: '#4CAF50',
   },
   freeDeliveryText: {
     color: '#007AFF',

@@ -47,11 +47,11 @@ async def create_address(
             "label": address_data.label
         })
         
-        if existing_address:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Address with label '{address_data.label}' already exists"
-            )
+        # if existing_address:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_400_BAD_REQUEST,
+        #         detail=f"Address with label '{address_data.label}' already exists"
+        #     )
         
         # Check if this is the first address for the user
         is_default = user_addresses_count == 0  # First address becomes default

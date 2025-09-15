@@ -12,6 +12,7 @@ import {
   Dimensions,
   ScrollView,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,6 +56,49 @@ interface Category {
 interface CartQuantities {
   [productId: string]: number;
 }
+
+// Animated Logo Component
+const AnimatedLogo = () => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const startAnimation = () => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scaleAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 0.8,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    };
+
+    startAnimation();
+  }, [scaleAnim]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.logoContainer,
+        {
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
+      <Image
+        source={require('../../assets/icon.png')} // Replace with your logo path
+        style={styles.loadingLogo}
+        resizeMode="contain"
+      />
+    </Animated.View>
+  );
+};
 
 const HomeScreen = () => {
   const { user, token, loading: authLoading } = useAuth();
@@ -265,7 +309,7 @@ const HomeScreen = () => {
       
       if (profileResponse.ok) {
         const userData = await profileResponse.json();
-        console.log('User data received:', userData);
+        // console.log('User data received:', userData);
         
         // Check for different possible address formats in profile
         let displayAddress = null;
@@ -320,7 +364,7 @@ const HomeScreen = () => {
               
               if (addressResponse.ok) {
                 const addressData = await addressResponse.json();
-                console.log('Address data received:', addressData);
+                // console.log('Address data received:', addressData);
                 
                 // Handle different response formats
                 let addresses = [];
@@ -339,7 +383,7 @@ const HomeScreen = () => {
                 
                 if (defaultAddress) {
                   const addressParts = [];
-                  console.log('Processing address object:', defaultAddress);
+                  // console.log('Processing address object:', defaultAddress);
                   
                   if (typeof defaultAddress === 'string') {
                     displayAddress = defaultAddress;
@@ -347,44 +391,44 @@ const HomeScreen = () => {
                     // Handle your specific address structure
                     if (defaultAddress.street) {
                       addressParts.push(defaultAddress.street);
-                      console.log('Added street:', defaultAddress.street);
+                      // console.log('Added street:', defaultAddress.street);
                     }
                     if (defaultAddress.landmark && defaultAddress.landmark.trim()) {
                       addressParts.push(`near ${defaultAddress.landmark}`);
-                      console.log('Added landmark:', defaultAddress.landmark);
+                      // console.log('Added landmark:', defaultAddress.landmark);
                     }
                     if (defaultAddress.city) {
                       addressParts.push(defaultAddress.city);
-                      console.log('Added city:', defaultAddress.city);
+                      // console.log('Added city:', defaultAddress.city);
                     }
                     if (defaultAddress.state) {
                       addressParts.push(defaultAddress.state);
-                      console.log('Added state:', defaultAddress.state);
+                      // console.log('Added state:', defaultAddress.state);
                     }
                     if (defaultAddress.pincode) {
                       addressParts.push(defaultAddress.pincode);
-                      console.log('Added pincode:', defaultAddress.pincode);
+                      // console.log('Added pincode:', defaultAddress.pincode);
                     }
                     
-                    console.log('Address parts array:', addressParts);
+                    // console.log('Address parts array:', addressParts);
                     
                     // Fallback to other possible field names
                     if (addressParts.length === 0) {
-                      console.log('No parts found, trying fallback fields...');
+                      // console.log('No parts found, trying fallback fields...');
                       if (defaultAddress.address) addressParts.push(defaultAddress.address);
                       if (defaultAddress.zipcode) addressParts.push(defaultAddress.zipcode);
                     }
                     
                     if (addressParts.length > 0) {
                       displayAddress = addressParts.join(', ');
-                      console.log('Final joined address:', displayAddress);
+                      // console.log('Final joined address:', displayAddress);
                     } else {
                       console.log('No address parts found to join');
                     }
                   }
                   
                   if (displayAddress) {
-                    console.log('Found address from endpoint:', endpoint);
+                    // console.log('Found address from endpoint:', endpoint);
                     console.log('Parsed address:', displayAddress);
                     break;
                   } else {
@@ -1011,10 +1055,11 @@ const HomeScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading products and categories...</Text>
+          <AnimatedLogo />
+          {/* <Text style={styles.loadingText}>Loading amazing products...</Text>
           <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
             <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </SafeAreaView>
     );
@@ -1171,17 +1216,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: '#fff',
+  },
+  logoContainer: {
+    marginBottom: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingLogo: {
+    width: 120,
+    height: 120,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    fontSize: 18,
+    color: '#333',
+    marginBottom: 24,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   retryButton: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     paddingVertical: 12,
     backgroundColor: '#007AFF',
-    borderRadius: 8,
+    borderRadius: 25,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   retryButtonText: {
     color: '#fff',
