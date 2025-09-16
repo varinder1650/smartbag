@@ -7,7 +7,7 @@
     "userInterfaceStyle": "light",
     "scheme": "smartbag",
     "splash": {
-      "image": "./assets/icon.png",
+      // "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },

@@ -51,6 +51,11 @@ const navigation = [
     icon: Users,
   },
   {
+    name: "Discount Coupons",
+    href: "/dashboard/discount",
+    icon: Users,
+  },
+  {
     name: "Pricing",
     href: "/dashboard/pricing",
     icon: DollarSign,
