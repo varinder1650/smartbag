@@ -1,11 +1,31 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { wsService } from "@/services/websocket";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, ShoppingCart, Users, Package, TrendingUp } from "lucide-react";
+import { 
+  DollarSign, 
+  ShoppingCart, 
+  Users, 
+  Package, 
+  TrendingUp, 
+  BarChart3,
+  Filter,
+  RefreshCw,
+  X
+} from "lucide-react";
 import {
   LineChart,
   Line,
@@ -14,8 +34,19 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  BarChart,
+  Bar
 } from "recharts";
-import { format } from "date-fns";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
+
+interface ChartFilters {
+  dateRange: string;
+  fromDate: string;
+  toDate: string;
+  status: string;
+  minAmount: string;
+  maxAmount: string;
+}
 
 export default function Dashboard() {
   const { 
@@ -34,37 +65,250 @@ export default function Dashboard() {
   } = useDashboardStore();
   const { toast } = useToast();
 
+  // Chart filters state
+  const [chartFilters, setChartFilters] = useState<ChartFilters>({
+    dateRange: "last_30_days",
+    fromDate: "",
+    toDate: "",
+    status: "all",
+    minAmount: "",
+    maxAmount: ""
+  });
+
+  const [orderCountData, setOrderCountData] = useState<any[]>([]);
+  const [showFiltersPopover, setShowFiltersPopover] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const statusOptions = [
+    { value: "all", label: "All Statuses" },
+    { value: "pending", label: "Pending" },
+    { value: "confirmed", label: "Confirmed" },
+    { value: "preparing", label: "Preparing" },
+    { value: "prepared", label: "Prepared" },
+    { value: "accepted", label: "Accepted" },
+    { value: "assigned", label: "Assigned" },
+    { value: "out_for_delivery", label: "Out for Delivery" },
+    { value: "delivered", label: "Delivered" },
+    { value: "cancelled", label: "Cancelled" },
+  ];
+
+  const dateRangeOptions = [
+    { value: "last_7_days", label: "Last 7 Days" },
+    { value: "last_30_days", label: "Last 30 Days" },
+    { value: "last_90_days", label: "Last 90 Days" },
+    { value: "this_month", label: "This Month" },
+    { value: "last_month", label: "Last Month" },
+    { value: "custom", label: "Custom Range" },
+  ];
+
+  // Get date range based on preset
+  const getDateRange = (range: string) => {
+    const now = new Date();
+    const today = startOfDay(now);
+    
+    switch (range) {
+      case 'last_7_days':
+        return {
+          from: subDays(today, 7),
+          to: endOfDay(now)
+        };
+      case 'last_30_days':
+        return {
+          from: subDays(today, 30),
+          to: endOfDay(now)
+        };
+      case 'last_90_days':
+        return {
+          from: subDays(today, 90),
+          to: endOfDay(now)
+        };
+      case 'this_month':
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return {
+          from: startOfMonth,
+          to: endOfDay(now)
+        };
+      case 'last_month':
+        const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        return {
+          from: startOfLastMonth,
+          to: endOfDay(endOfLastMonth)
+        };
+      case 'custom':
+        return {
+          from: chartFilters.fromDate ? new Date(chartFilters.fromDate) : subDays(today, 30),
+          to: chartFilters.toDate ? endOfDay(new Date(chartFilters.toDate)) : endOfDay(now)
+        };
+      default:
+        return {
+          from: subDays(today, 30),
+          to: endOfDay(now)
+        };
+    }
+  };
+
+  // Filter orders based on current filters
+  const getFilteredOrders = () => {
+    let filteredOrders = [...orders];
+
+    // Date range filter
+    const { from, to } = getDateRange(chartFilters.dateRange);
+    filteredOrders = filteredOrders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      return orderDate >= from && orderDate <= to;
+    });
+
+    // Status filter
+    if (chartFilters.status !== 'all') {
+      filteredOrders = filteredOrders.filter(order => order.status === chartFilters.status);
+    }
+
+    // Amount range filter
+    if (chartFilters.minAmount) {
+      const minAmount = parseFloat(chartFilters.minAmount);
+      filteredOrders = filteredOrders.filter(order => 
+        parseFloat(order.total || '0') >= minAmount
+      );
+    }
+
+    if (chartFilters.maxAmount) {
+      const maxAmount = parseFloat(chartFilters.maxAmount);
+      filteredOrders = filteredOrders.filter(order => 
+        parseFloat(order.total || '0') <= maxAmount
+      );
+    }
+
+    return filteredOrders;
+  };
+
+  // Generate revenue data for chart based on filters
+  const generateFilteredRevenueData = () => {
+    const filteredOrders = getFilteredOrders();
+    const { from, to } = getDateRange(chartFilters.dateRange);
+    
+    const days = [];
+    const currentDate = new Date(from);
+    
+    while (currentDate <= to) {
+      const dayRevenue = filteredOrders
+        .filter(order => {
+          const orderDate = new Date(order.created_at);
+          return orderDate.toDateString() === currentDate.toDateString() && 
+                 (chartFilters.status === 'all' || order.status === 'delivered');
+        })
+        .reduce((sum, order) => sum + (parseFloat(order.total) || 0), 0);
+      
+      days.push({
+        date: currentDate.toISOString(),
+        revenue: dayRevenue
+      });
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    setRevenueData(days);
+  };
+
+  // Generate order count data for chart based on filters
+  const generateOrderCountData = () => {
+    const filteredOrders = getFilteredOrders();
+    const { from, to } = getDateRange(chartFilters.dateRange);
+    
+    const days = [];
+    const currentDate = new Date(from);
+    
+    while (currentDate <= to) {
+      const dayOrders = filteredOrders.filter(order => {
+        const orderDate = new Date(order.created_at);
+        return orderDate.toDateString() === currentDate.toDateString();
+      }).length;
+      
+      days.push({
+        date: currentDate.toISOString(),
+        orders: dayOrders
+      });
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    setOrderCountData(days);
+  };
+
+  // Handle filter changes
+  const handleFilterChange = (key: keyof ChartFilters, value: string) => {
+    setChartFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Apply filters
+  const applyFilters = () => {
+    generateFilteredRevenueData();
+    generateOrderCountData();
+    setShowFiltersPopover(false);
+    toast({
+      title: "Filters Applied",
+      description: "Charts updated with new filters",
+    });
+  };
+
+  // Clear filters
+  const clearFilters = () => {
+    setChartFilters({
+      dateRange: "last_30_days",
+      fromDate: "",
+      toDate: "",
+      status: "all",
+      minAmount: "",
+      maxAmount: ""
+    });
+    setTimeout(() => {
+      generateFilteredRevenueData();
+      generateOrderCountData();
+    }, 100);
+  };
+
+  // Refresh charts
+  const refreshCharts = () => {
+    setIsRefreshing(true);
+    generateFilteredRevenueData();
+    generateOrderCountData();
+    setTimeout(() => setIsRefreshing(false), 1000);
+    toast({
+      title: "Charts Refreshed",
+      description: "Data has been updated",
+    });
+  };
+
   // Request initial data and set up real-time handlers
   useEffect(() => {
-    // Request all dashboard data - only call endpoints that exist
     wsService.send({ type: 'get_products' });
     wsService.send({ type: 'get_orders', filters: {} });
     wsService.send({ type: 'get_users', filters: {} });
 
-    // Set up real-time message handlers
-    const handleProductsData = (data) => {
+    const handleProductsData = (data: any) => {
       console.log('Dashboard received products data');
       setProducts(data.products || []);
       calculateStats();
     };
 
-    const handleOrdersData = (data) => {
+    const handleOrdersData = (data: any) => {
       console.log('Dashboard received orders data');
       setOrders(data.orders || []);
       setRecentOrders(data.orders?.slice(0, 10) || []);
       calculateStats();
-      generateRevenueData(data.orders || []);
     };
 
-    const handleUsersData = (data) => {
+    const handleUsersData = (data: any) => {
       console.log('Dashboard received users data');
       setUsers(data.users || []);
       calculateStats();
     };
 
-    const handleError = (data) => {
+    const handleError = (data: any) => {
       console.error('Dashboard WebSocket error:', data);
-      // Only show error toast for non-routine errors
       if (!data.message?.includes('Unknown message type')) {
         toast({
           title: "Error",
@@ -74,13 +318,11 @@ export default function Dashboard() {
       }
     };
 
-    // Register message handlers
     wsService.onMessage("products_data", handleProductsData);
     wsService.onMessage("orders_data", handleOrdersData);
     wsService.onMessage("users_data", handleUsersData);
     wsService.onMessage("error", handleError);
 
-    // Cleanup function
     return () => {
       wsService.onMessage("products_data", () => {});
       wsService.onMessage("orders_data", () => {});
@@ -112,32 +354,13 @@ export default function Dashboard() {
     setStats(newStats);
   };
 
-  // Generate revenue data for chart
-  const generateRevenueData = (ordersData) => {
-    const last30Days = [];
-    const now = new Date();
-    
-    // Generate last 30 days
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      
-      const dayRevenue = ordersData
-        .filter(order => {
-          const orderDate = new Date(order.created_at);
-          return orderDate.toDateString() === date.toDateString() && 
-                 order.status === 'delivered';
-        })
-        .reduce((sum, order) => sum + (parseFloat(order.total) || 0), 0);
-      
-      last30Days.push({
-        date: date.toISOString(),
-        revenue: dayRevenue
-      });
+  // Update charts when orders or filters change
+  useEffect(() => {
+    if (orders.length > 0) {
+      generateFilteredRevenueData();
+      generateOrderCountData();
     }
-    
-    setRevenueData(last30Days);
-  };
+  }, [orders, chartFilters]);
 
   // Recalculate stats when data changes
   useEffect(() => {
@@ -145,13 +368,6 @@ export default function Dashboard() {
       calculateStats();
     }
   }, [products, orders, users]);
-
-  // Generate revenue data when orders change
-  useEffect(() => {
-    if (orders.length > 0) {
-      generateRevenueData(orders);
-    }
-  }, [orders, setRevenueData]);
 
   const statsCards = [
     {
@@ -180,6 +396,18 @@ export default function Dashboard() {
       description: "Total products in catalog",
     },
   ];
+
+  // Count active filters
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (chartFilters.dateRange !== 'last_30_days') count++;
+    if (chartFilters.status !== 'all') count++;
+    if (chartFilters.minAmount) count++;
+    if (chartFilters.maxAmount) count++;
+    return count;
+  };
+
+  const activeFiltersCount = getActiveFiltersCount();
 
   return (
     <div className="p-6 space-y-6">
@@ -211,6 +439,147 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Chart Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Chart Filters
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshCharts}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              
+              <Popover open={showFiltersPopover} onOpenChange={setShowFiltersPopover}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="relative">
+                    <Filter className="h-4 w-4 mr-2" />
+                    More Filters
+                    {activeFiltersCount > 0 && (
+                      <Badge variant="secondary" className="ml-2 px-1 py-0 text-xs">
+                        {activeFiltersCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-4" align="end">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold">Chart Filters</h4>
+                      <Button variant="ghost" size="sm" onClick={clearFilters}>
+                        <X className="h-4 w-4 mr-1" />
+                        Clear
+                      </Button>
+                    </div>
+                    
+                    <Separator />
+                    
+                    {/* Status Filter */}
+                    <div className="space-y-2">
+                      <Label>Order Status</Label>
+                      <Select 
+                        value={chartFilters.status} 
+                        onValueChange={(value) => handleFilterChange('status', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Custom Date Range */}
+                    {chartFilters.dateRange === 'custom' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-2">
+                          <Label>From Date</Label>
+                          <Input
+                            type="date"
+                            value={chartFilters.fromDate}
+                            onChange={(e) => handleFilterChange('fromDate', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>To Date</Label>
+                          <Input
+                            type="date"
+                            value={chartFilters.toDate}
+                            onChange={(e) => handleFilterChange('toDate', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Amount Range */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
+                        <Label>Min Amount (₹)</Label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={chartFilters.minAmount}
+                          onChange={(e) => handleFilterChange('minAmount', e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Amount (₹)</Label>
+                        <Input
+                          type="number"
+                          placeholder="No limit"
+                          value={chartFilters.maxAmount}
+                          onChange={(e) => handleFilterChange('maxAmount', e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <Button onClick={applyFilters} className="w-full">
+                      Apply Filters
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </CardTitle>
+          <CardDescription>
+            Customize the date range and filters for both charts
+          </CardDescription>
+          
+          {/* Quick Date Range Filter */}
+          <div className="flex items-center gap-2">
+            <Label>Date Range:</Label>
+            <Select 
+              value={chartFilters.dateRange} 
+              onValueChange={(value) => handleFilterChange('dateRange', value)}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {dateRangeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue Chart */}
         <Card>
@@ -219,7 +588,10 @@ export default function Dashboard() {
               <TrendingUp className="h-5 w-5" />
               Revenue Trend
             </CardTitle>
-            <CardDescription>Daily revenue over the last 30 days</CardDescription>
+            <CardDescription>
+              Daily revenue for the selected period
+              {chartFilters.status !== 'all' && ` (${chartFilters.status} orders only)`}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -247,49 +619,92 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-full">
-                  <p className="text-muted-foreground">Loading revenue data...</p>
+                  <p className="text-muted-foreground">No revenue data available</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Recent Orders */}
+        {/* Order Count Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Orders</CardTitle>
-            <CardDescription>Latest orders from your customers</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Order Count Trend
+            </CardTitle>
+            <CardDescription>
+              Daily order count for the selected period
+              {chartFilters.status !== 'all' && ` (${chartFilters.status} orders only)`}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {!recentOrders || recentOrders.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No recent orders</p>
+            <div className="h-[300px]">
+              {orderCountData && orderCountData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={orderCountData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(value) => format(new Date(value), "MMM dd")}
+                    />
+                    <YAxis />
+                    <Tooltip
+                      labelFormatter={(value) => format(new Date(value), "MMM dd, yyyy")}
+                      formatter={(value) => [value, "Orders"]}
+                    />
+                    <Bar
+                      dataKey="orders"
+                      fill="hsl(var(--primary))"
+                      radius={[2, 2, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               ) : (
-                recentOrders.map((order) => (
-                  <div key={order._id || order.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium">#{order.id}</p>
-                        <StatusBadge status={order.status} />
-                      </div>
-                      <p className="text-sm text-muted-foreground">{order.user_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.created_at ? format(new Date(order.created_at), "MMM dd, HH:mm") : 'N/A'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">₹{order.total}</p>
-                      {order.deliveryPartner && (
-                        <p className="text-xs text-muted-foreground">{order.deliveryPartner}</p>
-                      )}
-                    </div>
-                  </div>
-                ))
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-muted-foreground">No order data available</p>
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Orders */}
+      {/* <Card>
+        <CardHeader>
+          <CardTitle>Recent Orders</CardTitle>
+          <CardDescription>Latest orders from your customers</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {!recentOrders || recentOrders.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No recent orders</p>
+            ) : (
+              recentOrders.map((order: any) => (
+                <div key={order._id || order.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium">#{order.id}</p>
+                      <StatusBadge status={order.status} />
+                    </div>
+                    <p className="text-sm text-muted-foreground">{order.user_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {order.created_at ? format(new Date(order.created_at), "MMM dd, HH:mm") : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">₹{order.total}</p>
+                    {order.deliveryPartner && (
+                      <p className="text-xs text-muted-foreground">{order.deliveryPartner}</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card> */}
     </div>
   );
 }
