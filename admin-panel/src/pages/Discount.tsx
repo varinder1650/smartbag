@@ -48,6 +48,7 @@ import {
   Loader2
 } from "lucide-react";
 import { format } from "date-fns";
+import { dataTagErrorSymbol } from "@tanstack/react-query";
 
 // Define interfaces
 interface DiscountCoupon {
@@ -162,10 +163,10 @@ export default function DiscountCoupons() {
       type: 'get_users',
       filters: {}
     });
-
+    // console.log(data)
     const handleCouponsData = (data: any) => {
       console.log('Received coupons data:', data);
-      setCoupons(data.coupons || []);
+      setCoupons(data.data || []);
       setIsLoading(false);
     };
 

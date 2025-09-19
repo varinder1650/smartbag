@@ -10,6 +10,7 @@ from admin.handlers.category import send_categories, create_categories, update_c
 from admin.handlers.customers import send_customers
 from admin.handlers.help import get_tickets
 from admin.handlers.requests import get_requests
+from admin.handlers.coupons import get_coupons,create_coupons,update_coupon,delete_coupon,toggle_coupon
 from admin.handlers.auth import (
     handle_get_users, 
     handle_update_user_role, 
@@ -250,6 +251,21 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
 
             elif msg_type == "get_user_suggestions":
                 await get_requests(websocket,message.get("filters",{}),db)
+
+            elif msg_type == "create_discount_coupon":
+                await create_coupons(websocket,message.get("data"),db)
+            
+            elif msg_type == "get_discount_coupons":
+                await get_coupons(websocket,db)
+
+            elif msg_type == "update_discount_coupon":
+                await update_coupon(websocket,message.get("data"),db)
+            
+            elif msg_type == "delete_discount_coupon":
+                await delete_coupon(websocket,message.get("data"),db)
+
+            elif msg_type == "toggle_coupon_status":
+                await toggle_coupon(websocket,message.get("data"),db)
 
             else:
                 logger.warning(f"Unknown message type: {msg_type}")

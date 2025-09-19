@@ -92,59 +92,59 @@ export default function HelpSupport() {
     urgent: "destructive"
   } as const;
 
-  const faqData = [
-    {
-      category: "Orders & Delivery",
-      items: [
-        {
-          question: "How do I track my order?",
-          answer: "You can track your order by logging into your account and viewing the 'My Orders' section. You'll see real-time updates on your order status including preparation, dispatch, and delivery."
-        },
-        {
-          question: "What are the delivery charges?",
-          answer: "Delivery charges vary based on distance and order value. Orders above ₹500 qualify for free delivery within the standard delivery zone."
-        },
-        {
-          question: "Can I cancel my order?",
-          answer: "Yes, you can cancel your order within 5 minutes of placing it. After that, cancellation depends on the order status. Orders that are already being prepared cannot be cancelled."
-        }
-      ]
-    },
-    {
-      category: "Payments & Refunds", 
-      items: [
-        {
-          question: "What payment methods do you accept?",
-          answer: "We accept all major credit/debit cards, UPI, net banking, and digital wallets like Paytm, Google Pay, and PhonePe."
-        },
-        {
-          question: "How long does it take to process refunds?",
-          answer: "Refunds are typically processed within 3-5 business days. The time may vary depending on your payment method and bank."
-        },
-        {
-          question: "Why was my payment declined?",
-          answer: "Payment can be declined due to insufficient funds, incorrect card details, network issues, or bank security measures. Please try again or use a different payment method."
-        }
-      ]
-    },
-    {
-      category: "Account & Profile",
-      items: [
-        {
-          question: "How do I reset my password?",
-          answer: "Click on 'Forgot Password' on the login page and enter your registered email. You'll receive a password reset link within a few minutes."
-        },
-        {
-          question: "Can I change my delivery address?",
-          answer: "Yes, you can add, edit, or delete delivery addresses from your account profile. Make sure to select the correct address before placing an order."
-        },
-        {
-          question: "How do I delete my account?",
-          answer: "To delete your account, please contact our customer support team. Note that this action is irreversible and will remove all your order history."
-        }
-      ]
-    }
-  ];
+  // const faqData = [
+  //   {
+  //     category: "Orders & Delivery",
+  //     items: [
+  //       {
+  //         question: "How do I track my order?",
+  //         answer: "You can track your order by logging into your account and viewing the 'My Orders' section. You'll see real-time updates on your order status including preparation, dispatch, and delivery."
+  //       },
+  //       {
+  //         question: "What are the delivery charges?",
+  //         answer: "Delivery charges vary based on distance and order value. Orders above ₹500 qualify for free delivery within the standard delivery zone."
+  //       },
+  //       {
+  //         question: "Can I cancel my order?",
+  //         answer: "Yes, you can cancel your order within 5 minutes of placing it. After that, cancellation depends on the order status. Orders that are already being prepared cannot be cancelled."
+  //       }
+  //     ]
+  //   },
+  //   {
+  //     category: "Payments & Refunds", 
+  //     items: [
+  //       {
+  //         question: "What payment methods do you accept?",
+  //         answer: "We accept all major credit/debit cards, UPI, net banking, and digital wallets like Paytm, Google Pay, and PhonePe."
+  //       },
+  //       {
+  //         question: "How long does it take to process refunds?",
+  //         answer: "Refunds are typically processed within 3-5 business days. The time may vary depending on your payment method and bank."
+  //       },
+  //       {
+  //         question: "Why was my payment declined?",
+  //         answer: "Payment can be declined due to insufficient funds, incorrect card details, network issues, or bank security measures. Please try again or use a different payment method."
+  //       }
+  //     ]
+  //   },
+  //   {
+  //     category: "Account & Profile",
+  //     items: [
+  //       {
+  //         question: "How do I reset my password?",
+  //         answer: "Click on 'Forgot Password' on the login page and enter your registered email. You'll receive a password reset link within a few minutes."
+  //       },
+  //       {
+  //         question: "Can I change my delivery address?",
+  //         answer: "Yes, you can add, edit, or delete delivery addresses from your account profile. Make sure to select the correct address before placing an order."
+  //       },
+  //       {
+  //         question: "How do I delete my account?",
+  //         answer: "To delete your account, please contact our customer support team. Note that this action is irreversible and will remove all your order history."
+  //       }
+  //     ]
+  //   }
+  // ];
 
   // Request initial data and set up real-time handlers
   useEffect(() => {
@@ -396,7 +396,7 @@ export default function HelpSupport() {
                     {filteredTickets.length > 0 ? filteredTickets.map((ticket) => (
                       <TableRow key={ticket._id || ticket.id}>
                         <TableCell className="font-mono text-sm">
-                          #{(ticket.id || '').slice(-6)}
+                          #{(ticket._id || '').slice(-6)}
                         </TableCell>
                         <TableCell className="max-w-xs">
                           <div className="truncate" title={ticket.subject}>
@@ -484,7 +484,7 @@ export default function HelpSupport() {
           </Card>
 
           {/* Contact Information */}
-          <Card>
+          {/* <Card>
             <CardHeader>
               <CardTitle>Contact Information</CardTitle>
               <CardDescription>Support contact details</CardDescription>
@@ -512,12 +512,12 @@ export default function HelpSupport() {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
       </div>
 
       {/* FAQ Section */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
@@ -546,7 +546,7 @@ export default function HelpSupport() {
             ))}
           </Accordion>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Response Modal */}
       <Dialog open={showResponseModal} onOpenChange={setShowResponseModal}>
@@ -554,7 +554,7 @@ export default function HelpSupport() {
           <DialogHeader>
             <DialogTitle>Respond to Support Ticket</DialogTitle>
             <DialogDescription>
-              Ticket #{selectedTicket?.id?.slice(-6)} - {selectedTicket?.subject}
+              Ticket #{selectedTicket?._id?.slice(-6)} - {selectedTicket?.subject}
             </DialogDescription>
           </DialogHeader>
           
@@ -570,6 +570,7 @@ export default function HelpSupport() {
                     <div>
                       <p><strong>User:</strong> {selectedTicket.user_name}</p>
                       <p><strong>Email:</strong> {selectedTicket.user_email}</p>
+                      <p><strong>Phone:</strong> {selectedTicket.phone}</p>
                       <p><strong>Category:</strong> {selectedTicket.category}</p>
                     </div>
                     <div>
@@ -579,14 +580,14 @@ export default function HelpSupport() {
                         </Badge>
                       </p>
                       <p><strong>Status:</strong> <StatusBadge status={selectedTicket.status} /></p>
-                      <p><strong>Created:</strong> {format(new Date(selectedTicket.created_at), "MMM dd, yyyy HH:mm")}</p>
+                      <p><strong>Created:</strong> {format(new Date(selectedTicket.created_at), "MMM dd, yyyy HH:mm:ss")}</p>
                     </div>
                   </div>
                   
                   <div>
                     <p><strong>Description:</strong></p>
                     <div className="mt-2 p-3 bg-muted rounded-lg">
-                      <p className="text-sm">{selectedTicket.description}</p>
+                      <p className="text-sm">{selectedTicket.message}</p>
                     </div>
                   </div>
 
