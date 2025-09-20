@@ -19,6 +19,7 @@ import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import Help from './pages/Help';
 import Requests from './pages/Requests';
+import DiscountCoupons from "./pages/Discount";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +77,7 @@ const AppContent = () => {
         <Route path="orders" element={<Orders />} />
         <Route path="users" element={<Users />} />
         <Route path="pricing" element={<Pricing />} />
+        <Route path="discount" element={<DiscountCoupons />} />
         <Route path="help" element={<Help />} />
         <Route path="requests" element={<Requests />} />
       </Route>

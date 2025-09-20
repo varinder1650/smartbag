@@ -54,8 +54,15 @@ class OrderService:
         now = datetime.utcnow()
         order_dict["created_at"] = order_dict.get("created_at", now)
         order_dict["updated_at"] = order_dict.get("updated_at", now)
+        order_dict["promo_code"] = order_data['promo_code']
+        order_dict["promo_discount"] = order_data['promo_discount']
+        # print("order data: ", order_dict)
         order_id = await self.db.insert_one("orders", order_dict)
         
+        if order_data['promo_code']:
+            update_coupon = await self.db.find_one("discount_coupons",{"code":order_data['promo_code']})
+            if update_coupon['usage_limit'] > 0:
+                await self.db.update_one('discount_coupons',{"code":order_data['promo_code']},{"usage_limit":update_coupon['usage_limit']-1})
         # Clear user's cart
         cart = await self.db.find_one("carts", {"user": ObjectId(current_user.id)})
         if cart:
