@@ -704,7 +704,7 @@ export default function Orders() {
             <div className="flex items-center space-x-2 flex-1">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search orders by ID or customer name..."
+                placeholder="Search orders by ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="max-w-sm"
@@ -819,14 +819,14 @@ export default function Orders() {
                     </div>
 
                     {/* Customer Name Filter */}
-                    <div className="space-y-2">
+                    {/* <div className="space-y-2">
                       <Label>Customer Name</Label>
                       <Input
                         placeholder="Filter by customer name"
                         value={filters.customer_name}
                         onChange={(e) => handleFilterChange('customer_name', e.target.value)}
                       />
-                    </div>
+                    </div> */}
 
                     <Separator />
                     
