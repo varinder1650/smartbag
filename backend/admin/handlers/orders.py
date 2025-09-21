@@ -167,7 +167,6 @@ async def build_orders_query(filters: Dict[str, Any]) -> Dict[str, Any]:
         if filters.get("status") and filters["status"] != "all":
             query["order_status"] = filters["status"]
         
-        # Date range filters - optimized for your created_at index
         date_conditions = []
         
         if filters.get("from_date"):
@@ -214,14 +213,14 @@ async def build_orders_query(filters: Dict[str, Any]) -> Dict[str, Any]:
                 query["$and"] = amount_conditions
         
         # Delivery partner filter - optimized for your delivery_partner index
-        if filters.get("delivery_partner") and filters["delivery_partner"] != "all":
-            if filters["delivery_partner"] == "unassigned":
-                query["delivery_partner"] = None
-            else:
-                try:
-                    query["delivery_partner"] = ObjectId(filters["delivery_partner"])
-                except:
-                    logger.warning(f"Invalid delivery_partner ID: {filters['delivery_partner']}")
+        # if filters.get("delivery_partner") and filters["delivery_partner"] != "all":
+        #     if filters["delivery_partner"] == "unassigned":
+        #         query["delivery_partner"] = None
+        #     else:
+        #         try:
+        #             query["delivery_partner"] = ObjectId(filters["delivery_partner"])
+        #         except:
+        #             logger.warning(f"Invalid delivery_partner ID: {filters['delivery_partner']}")
         
         # Search functionality - for order ID and customer names
         # Note: This requires additional queries for customer names since they're in users collection
@@ -229,30 +228,19 @@ async def build_orders_query(filters: Dict[str, Any]) -> Dict[str, Any]:
         
         if filters.get("search"):
             search_term = filters["search"].strip()
+            logger.info(f"Searching for order ID: {search_term}")
             
-            # Search by order ID (exact match or partial)
+            # Search by order ID only (both with and without #)
             if search_term.startswith('#'):
                 # Remove # and search
                 order_id_search = search_term[1:]
-                search_conditions.append({"order_id": {"$regex": order_id_search, "$options": "i"}})
+                query["order_id"] = {"$regex": order_id_search, "$options": "i"}
             else:
-                # Search by order ID without #
-                search_conditions.append({"order_id": {"$regex": search_term, "$options": "i"}})
-        
-        # Customer name search - this is more complex and expensive
-        if filters.get("customer_name"):
-            customer_name = filters["customer_name"].strip()
-            # Find users with matching names first
-            name_regex = {"$regex": customer_name, "$options": "i"}
-            # This will need to be handled in the calling function to avoid circular imports
-            # For now, we'll add it as a separate condition
-            query["_customer_name_search"] = customer_name
-        
-        if search_conditions:
-            if "$and" in query:
-                query["$and"].extend(search_conditions)
-            else:
-                query["$or"] = search_conditions
+                # Search by order ID without # - try both exact match and with #
+                query["$or"] = [
+                    {"_id": ObjectId(search_term)},
+                    {"_id": {"$regex": f"#{search_term}", "$options": "i"}}
+                ]
         
         logger.info(f"Built query: {query}")
         return query
@@ -261,58 +249,83 @@ async def build_orders_query(filters: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Error building orders query: {e}")
         return {}
 
-async def handle_customer_name_search(query: Dict[str, Any], db) -> Dict[str, Any]:
-    """Handle customer name search by finding matching users first"""
-    if "_customer_name_search" not in query:
-        return query
+
+# async def handle_customer_name_search(query: Dict[str, Any], db) -> Dict[str, Any]:
+#     """Handle customer name search and general search by finding matching users first"""
+#     search_term = query.pop("_search_term", None)
+#     customer_name = query.pop("_customer_name_search", None)
     
-    try:
-        customer_name = query.pop("_customer_name_search")
+#     # Combine both search terms
+#     search_names = []
+#     if search_term:
+#         search_names.append(search_term)
+#     if customer_name:
+#         search_names.append(customer_name)
+    
+#     if not search_names:
+#         return query
+    
+#     try:
+#         # Create regex patterns for all search terms
+#         name_conditions = []
+#         for name in search_names:
+#             name_conditions.append({"name": {"$regex": name, "$options": "i"}})
+#             name_conditions.append({"email": {"$regex": name, "$options": "i"}})
+#             name_conditions.append({"phone": {"$regex": name, "$options": "i"}})
         
-        # Find users with matching names
-        matching_users = await db.find_many(
-            "users", 
-            {"name": {"$regex": customer_name, "$options": "i"}},
-            projection={"_id": 1}
-        )
+#         # Find users with matching names, emails, or phones
+#         matching_users = await db.find_many(
+#             "users", 
+#             {"$or": name_conditions},
+#             projection={"_id": 1}
+#         )
         
-        if matching_users:
-            user_ids = [user["_id"] for user in matching_users]
+#         if matching_users:
+#             user_ids = [user["_id"] for user in matching_users]
             
-            # Add user filter to query
-            if "$and" in query:
-                query["$and"].append({"user": {"$in": user_ids}})
-            else:
-                query["user"] = {"$in": user_ids}
-        else:
-            # No matching users found, return empty result
-            query["_id"] = ObjectId("000000000000000000000000")  # Non-existent ID
+#             # Add user filter to existing query conditions
+#             if "$and" in query:
+#                 # Add user search as another condition in $and
+#                 query["$and"].append({"user": {"$in": user_ids}})
+#             elif "$or" in query:
+#                 # If we have $or conditions (like order ID search), combine with user search
+#                 existing_or = query.pop("$or")
+#                 query["$and"] = [
+#                     {"$or": existing_or},
+#                     {"user": {"$in": user_ids}}
+#                 ]
+#             else:
+#                 query["user"] = {"$in": user_ids}
+#         else:
+#             # No matching users found for search term
+#             logger.info(f"No users found matching search terms: {search_names}")
+#             # Don't return empty result, let order ID search work
         
-        return query
+#         return query
         
-    except Exception as e:
-        logger.error(f"Error handling customer name search: {e}")
-        return query
+#     except Exception as e:
+#         logger.error(f"Error handling customer name search: {e}")
+#         return query
 
 # Enhanced send_orders function with customer name search
-async def send_orders_enhanced(websocket: WebSocket, filters: dict, db):
-    """Enhanced send_orders with customer name search support"""
-    try:
-        # Build initial query
-        query = await build_orders_query(filters)
+# async def send_orders_enhanced(websocket: WebSocket, filters: dict, db):
+#     """Enhanced send_orders with customer name search support"""
+#     try:
+#         # Build initial query
+#         query = await build_orders_query(filters)
         
-        # Handle customer name search if needed
-        query = await handle_customer_name_search(query, db)
+#         # Handle customer name search if needed
+#         query = await handle_customer_name_search(query, db)
         
-        # Continue with the rest of send_orders logic...
-        # (Copy the rest of the send_orders function here)
+#         # Continue with the rest of send_orders logic...
+#         # (Copy the rest of the send_orders function here)
         
-    except Exception as e:
-        logger.error(f"Error in enhanced send_orders: {e}")
-        await websocket.send_json({
-            "type": "error",
-            "message": "Failed to fetch orders"
-        })
+#     except Exception as e:
+#         logger.error(f"Error in enhanced send_orders: {e}")
+#         await websocket.send_json({
+#             "type": "error",
+#             "message": "Failed to fetch orders"
+#         })
 
 async def update_order_status(websocket: WebSocket, data: dict, user_info: dict, db):
     """Update order status with correct field mappings"""
@@ -491,7 +504,7 @@ async def get_orders_analytics(websocket: WebSocket, filters: dict, db):
     try:
         # Build base query
         query = await build_orders_query(filters)
-        query = await handle_customer_name_search(query, db)
+        # query = await handle_customer_name_search(query, db)
         
         # Aggregation pipeline for analytics
         pipeline = [
@@ -520,5 +533,131 @@ async def get_orders_analytics(websocket: WebSocket, filters: dict, db):
             "message": "Failed to get orders analytics"
         })
 
-# Update the main send_orders to use the enhanced version
-# send_orders = send_orders_enhanced
+async def get_orders_for_download(websocket: WebSocket, filters: dict, db):
+    """Get orders for CSV download with specified filters"""
+    try:
+        # Check if WebSocket is still connected
+        if hasattr(websocket, 'client_state') and websocket.client_state.value != 1:
+            logger.warning("WebSocket connection is not active, skipping get_orders_for_download")
+            return
+        
+        # Build MongoDB query from filters
+        query = await build_orders_query(filters)
+        # query = await handle_customer_name_search(query, db)
+        
+        logger.info(f"Download query: {query}")
+        
+        # Get all orders matching the criteria (no pagination for download)
+        sort_criteria = [("created_at", -1)]
+        
+        # Limit to reasonable amount for download (max 10000 orders)
+        limit = min(filters.get("limit", 10000), 10000)
+        
+        orders = await db.find_many(
+            "orders", 
+            query, 
+            sort=sort_criteria,
+            limit=limit
+        )
+        
+        logger.info(f"Found {len(orders)} orders for download")
+        
+        # Process orders with optimized queries (same logic as send_orders)
+        serialized_orders = []
+        
+        # Batch fetch users and delivery partners to reduce DB calls
+        user_ids = [order.get("user") for order in orders if order.get("user")]
+        delivery_partner_ids = [order.get("delivery_partner") for order in orders 
+                             if order.get("delivery_partner")]
+        
+        # Fetch users in batch
+        users_dict = {}
+        if user_ids:
+            users = await db.find_many("users", {"_id": {"$in": user_ids}})
+            users_dict = {str(user["_id"]): user for user in users}
+        
+        # Fetch delivery partners in batch
+        delivery_partners_dict = {}
+        if delivery_partner_ids:
+            partners = await db.find_many("users", {"_id": {"$in": delivery_partner_ids}})
+            delivery_partners_dict = {str(partner["_id"]): partner for partner in partners}
+        
+        # Batch fetch products for order items
+        product_ids = []
+        for order in orders:
+            if order.get("items"):
+                for item in order["items"]:
+                    if item.get("product"):
+                        product_ids.append(ObjectId(item["product"]))
+        
+        products_dict = {}
+        if product_ids:
+            products = await db.find_many("products", {"_id": {"$in": product_ids}})
+            products_dict = {str(product["_id"]): product for product in products}
+        
+        # Process each order
+        for order in orders:
+            try:
+                # Get user info
+                user_id = str(order.get("user", ""))
+                user = users_dict.get(user_id, {})
+                
+                # Get delivery partner info
+                delivery_partner_id = str(order.get("delivery_partner", "")) if order.get("delivery_partner") else None
+                delivery_partner = delivery_partners_dict.get(delivery_partner_id) if delivery_partner_id else None
+                
+                # Process order items
+                if order.get("items"):
+                    for item in order["items"]:
+                        product_id = str(item.get("product", ""))
+                        product = products_dict.get(product_id, {})
+                        item["product_name"] = product.get("name", "Unknown Product")
+                        item["product_image"] = product.get("images", [])
+                
+                # Serialize the order
+                serialized_order = serialize_document(order)
+                
+                # Add frontend-friendly field mappings
+                serialized_order["id"] = serialized_order["_id"]
+                serialized_order["total"] = serialized_order.get("total_amount", 0)
+                serialized_order["status"] = serialized_order.get("order_status", "pending")
+                
+                # Add user information
+                serialized_order["user_name"] = user.get("name", "Unknown")
+                serialized_order["user_email"] = user.get("email", "")
+                serialized_order["user_phone"] = user.get("phone", "")
+                
+                # Add delivery partner information
+                serialized_order["delivery_partner_name"] = (
+                    delivery_partner.get("name") if delivery_partner else None
+                )
+                
+                # Add delivery address for CSV
+                if order.get("delivery_address"):
+                    serialized_order["delivery_address"] = order["delivery_address"]
+                
+                serialized_orders.append(serialized_order)
+                
+            except Exception as serialize_error:
+                logger.error(f"Error serializing order for download {order.get('_id')}: {serialize_error}")
+                continue
+        
+        logger.info(f"Sending {len(serialized_orders)} orders for download")
+
+        await websocket.send_json({
+            "type": "orders_download_data",
+            "orders": serialized_orders,
+            "total_count": len(serialized_orders)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting orders for download: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Failed to fetch orders for download"
+            })
+        except:
+            logger.info("Could not send error message - client disconnected")
