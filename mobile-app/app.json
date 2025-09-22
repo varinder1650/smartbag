@@ -7,7 +7,7 @@
     "userInterfaceStyle": "light",
     "scheme": "smartbag",
     "splash": {
-      // "image": "./assets/icon.png",
+      "image": "./assets/splash .png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -15,10 +15,11 @@
       "**/*"
     ],
     "extra": {
-      "EXPO_PUBLIC_API_URL": "http://10.0.0.88:8000/api/",
+      // "EXPO_PUBLIC_API_URL": "http://10.0.0.88:8000/api/",
+      "EXPO_PUBLIC_API_URL": "https://smartbag-backend-oqlt.onrender.com",
       "EXPO_PUBLIC_OLA_KRUTRIM_API_KEY": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ",
       "eas": {
-        "projectId": "your-project-id-here"
+        "projectId": "37775160-3c66-48ef-988a-82efae359109"
       }
     },
     "ios": {
@@ -42,14 +43,14 @@
           }
         }
       },
-      "config": {
-        "googleSignIn": {
-          "reservedClientId": "com.googleusercontent.apps.1029983278193-mgl5t7mtqajk2a3vocs6qchbir317o9q"
-        },
-        "krutrimMaps": {
-          "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
-        }
-      }
+      // "config": {
+      //   "googleSignIn": {
+      //     "reservedClientId": "com.googleusercontent.apps.1029983278193-mgl5t7mtqajk2a3vocs6qchbir317o9q"
+      //   },
+      //   "krutrimMaps": {
+      //     "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
+      //   }
+      // }
     },
     "android": {
       "adaptiveIcon": {
@@ -58,16 +59,18 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "INTERNET"
+        "INTERNET",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "config": {
-        "googleSignIn": {
-          "certificateHash": "YOUR_ANDROID_CERTIFICATE_HASH"
-        },
-        "krutrimMaps": {
-          "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
-        }
-      },
+      // "config": {
+      //   "googleSignIn": {
+      //     "certificateHash": "5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25"
+      //   },
+      //   "krutrimMaps": {
+      //     "apiKey": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ"
+      //   }
+      // },
       "package": "com.ios.smartbag",
       "usesCleartextTraffic": true
     },
@@ -86,7 +89,9 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.1029983278193-mgl5t7mtqajk2a3vocs6qchbir317o9q"
         }
-      ]
-    ]
+      ],
+      "expo-router"
+    ],
+    "owner": "nitin3150"
   }
 }
