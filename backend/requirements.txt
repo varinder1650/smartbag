@@ -8,3 +8,4 @@ pydantic-settings
 pydantic[email]
 slowapi
 httpx
+pyjwt
