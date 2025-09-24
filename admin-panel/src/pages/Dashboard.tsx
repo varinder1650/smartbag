@@ -78,6 +78,7 @@ export default function Dashboard() {
   const [orderCountData, setOrderCountData] = useState<any[]>([]);
   const [showFiltersPopover, setShowFiltersPopover] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [analyticsLoaded, setAnalyticsLoaded] = useState(false);
 
   const statusOptions = [
     { value: "all", label: "All Statuses" },
@@ -137,7 +138,7 @@ export default function Dashboard() {
         };
       case 'custom':
         return {
-          from: chartFilters.fromDate ? new Date(chartFilters.fromDate) : subDays(today, 30),
+          from: chartFilters.fromDate ? startOfDay(new Date(chartFilters.fromDate)) : subDays(today, 30),
           to: chartFilters.toDate ? endOfDay(new Date(chartFilters.toDate)) : endOfDay(now)
         };
       default:
@@ -235,12 +236,20 @@ export default function Dashboard() {
     setOrderCountData(days);
   };
 
-  // Handle filter changes
+  // Handle filter changes - auto-apply status filter immediately
   const handleFilterChange = (key: keyof ChartFilters, value: string) => {
     setChartFilters(prev => ({
       ...prev,
       [key]: value
     }));
+    
+    // Auto-apply status filter immediately
+    if (key === 'status') {
+      setTimeout(() => {
+        generateFilteredRevenueData();
+        generateOrderCountData();
+      }, 100);
+    }
   };
 
   // Apply filters
@@ -288,11 +297,7 @@ export default function Dashboard() {
     console.log('Sending requests for dashboard data...');
     
     wsService.send({ type: 'get_products' });
-    wsService.send({ 
-      type: 'get_analytics', 
-      period: 'month',  // Add period parameter
-      filters: {}       // Keep filters for future use
-    });
+    wsService.send({ type: 'get_analytics', filters: {} }); // Back to original
     wsService.send({ type: 'get_users', filters: {} });
 
     const handleProductsData = (data: any) => {
@@ -303,16 +308,14 @@ export default function Dashboard() {
 
     const handleAnalyticsData = (data: any) => {
       console.log('=== ANALYTICS DATA RECEIVED ===');
-      console.log('Orders:', data.orders?.length || 0);
-      console.log('Analytics:', data.analytics);
+      console.log('Data received:', data);
       
       // Handle orders data if present (for chart generation)
       if (data.orders && Array.isArray(data.orders)) {
         console.log('Setting orders:', data.orders.length);
         setOrders(data.orders);
         setRecentOrders(data.orders.slice(0, 10));
-      } else {
-        console.warn('No orders data received or invalid format');
+        setAnalyticsLoaded(true); // Prevent calculateStats from overriding
       }
       
       // Handle analytics data for stats
@@ -322,15 +325,12 @@ export default function Dashboard() {
         setStats({
           totalRevenue: analytics.total_revenue || 0,
           totalOrders: analytics.total_orders || 0,
-          activeOrders: 0, // Will be calculated from orders
+          activeOrders: analytics.active_orders || 0,
           activeUsers: analytics.total_users || 0,
           totalProducts: analytics.total_products || 0,
         });
-      } else {
-        console.warn('No analytics data received');
+        setAnalyticsLoaded(true);
       }
-      
-      calculateStats();
     };
 
     const handleUsersData = (data: any) => {
@@ -351,20 +351,26 @@ export default function Dashboard() {
     };
 
     wsService.onMessage("products_data", handleProductsData);
-    wsService.onMessage("analytics_data", handleAnalyticsData);
+    wsService.onMessage("orders_data", handleAnalyticsData); // Change to orders_data
     wsService.onMessage("users_data", handleUsersData);
     wsService.onMessage("error", handleError);
 
     return () => {
       wsService.onMessage("products_data", () => {});
-      wsService.onMessage("analytics_data", () => {});
+      wsService.onMessage("orders_data", () => {}); // Change to orders_data
       wsService.onMessage("users_data", () => {});
       wsService.onMessage("error", () => {});
     };
   }, [toast, setRecentOrders, setStats, setRevenueData, setProducts, setOrders, setUsers]);
 
-  // Calculate stats based on current data
+  // Calculate stats based on current data - FIXED: Don't override analytics data
   const calculateStats = () => {
+    // If analytics data was already loaded, don't override it
+    if (analyticsLoaded) {
+      console.log('Skipping calculateStats - analytics already loaded');
+      return;
+    }
+    
     const totalRevenue = orders.reduce((sum, order) => {
       return order.status === 'delivered' ? sum + (parseFloat(order.total) || 0) : sum;
     }, 0);
@@ -383,6 +389,7 @@ export default function Dashboard() {
       totalProducts: products.length,
     };
 
+    console.log('Calculated stats locally:', newStats);
     setStats(newStats);
   };
 
@@ -429,11 +436,10 @@ export default function Dashboard() {
     },
   ];
 
-  // Count active filters
+  // Count active filters - updated since status moved outside
   const getActiveFiltersCount = () => {
     let count = 0;
     if (chartFilters.dateRange !== 'last_30_days') count++;
-    if (chartFilters.status !== 'all') count++;
     if (chartFilters.minAmount) count++;
     if (chartFilters.maxAmount) count++;
     return count;
@@ -505,7 +511,7 @@ export default function Dashboard() {
                 <PopoverContent className="w-80 p-4" align="end">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-semibold">Chart Filters</h4>
+                      <h4 className="font-semibold">Advanced Filters</h4>
                       <Button variant="ghost" size="sm" onClick={clearFilters}>
                         <X className="h-4 w-4 mr-1" />
                         Clear
@@ -513,48 +519,6 @@ export default function Dashboard() {
                     </div>
                     
                     <Separator />
-                    
-                    {/* Status Filter */}
-                    <div className="space-y-2">
-                      <Label>Order Status</Label>
-                      <Select 
-                        value={chartFilters.status} 
-                        onValueChange={(value) => handleFilterChange('status', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Custom Date Range */}
-                    {chartFilters.dateRange === 'custom' && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-2">
-                          <Label>From Date</Label>
-                          <Input
-                            type="date"
-                            value={chartFilters.fromDate}
-                            onChange={(e) => handleFilterChange('fromDate', e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>To Date</Label>
-                          <Input
-                            type="date"
-                            value={chartFilters.toDate}
-                            onChange={(e) => handleFilterChange('toDate', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    )}
 
                     {/* Amount Range */}
                     <div className="grid grid-cols-2 gap-2">
@@ -579,7 +543,7 @@ export default function Dashboard() {
                     </div>
 
                     <Button onClick={applyFilters} className="w-full">
-                      Apply Filters
+                      Apply Amount Filters
                     </Button>
                   </div>
                 </PopoverContent>
@@ -590,25 +554,77 @@ export default function Dashboard() {
             Customize the date range and filters for both charts
           </CardDescription>
           
-          {/* Quick Date Range Filter */}
-          <div className="flex items-center gap-2">
-            <Label>Date Range:</Label>
-            <Select 
-              value={chartFilters.dateRange} 
-              onValueChange={(value) => handleFilterChange('dateRange', value)}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {dateRangeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Quick Filters Row */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Label>Date Range:</Label>
+              <Select 
+                value={chartFilters.dateRange} 
+                onValueChange={(value) => handleFilterChange('dateRange', value)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {dateRangeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label>Status:</Label>
+              <Select 
+                value={chartFilters.status} 
+                onValueChange={(value) => handleFilterChange('status', value)}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {/* Custom Date Range Inputs */}
+          {chartFilters.dateRange === 'custom' && (
+            <div className="border-t pt-4">
+              <div className="grid grid-cols-2 gap-4 max-w-md">
+                <div className="space-y-2">
+                  <Label>From Date</Label>
+                  <Input
+                    type="date"
+                    value={chartFilters.fromDate}
+                    onChange={(e) => handleFilterChange('fromDate', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>To Date</Label>
+                  <Input
+                    type="date"
+                    value={chartFilters.toDate}
+                    onChange={(e) => handleFilterChange('toDate', e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={applyFilters} 
+                className="mt-3"
+                size="sm"
+              >
+                Apply Date Range
+              </Button>
+            </div>
+          )}
         </CardHeader>
       </Card>
 
