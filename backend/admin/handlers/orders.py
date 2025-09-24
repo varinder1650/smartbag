@@ -1,11 +1,10 @@
 from fastapi import WebSocket
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from admin.utils.serialize import serialize_document
-from admin.connection_manager import manager
+# from admin.connection_manager import manager
 from bson import ObjectId
-# import re
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 import math
 
 logger = logging.getLogger(__name__)
@@ -212,18 +211,6 @@ async def build_orders_query(filters: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 query["$and"] = amount_conditions
         
-        # Delivery partner filter - optimized for your delivery_partner index
-        # if filters.get("delivery_partner") and filters["delivery_partner"] != "all":
-        #     if filters["delivery_partner"] == "unassigned":
-        #         query["delivery_partner"] = None
-        #     else:
-        #         try:
-        #             query["delivery_partner"] = ObjectId(filters["delivery_partner"])
-        #         except:
-        #             logger.warning(f"Invalid delivery_partner ID: {filters['delivery_partner']}")
-        
-        # Search functionality - for order ID and customer names
-        # Note: This requires additional queries for customer names since they're in users collection
         search_conditions = []
         
         if filters.get("search"):
@@ -248,84 +235,6 @@ async def build_orders_query(filters: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error building orders query: {e}")
         return {}
-
-
-# async def handle_customer_name_search(query: Dict[str, Any], db) -> Dict[str, Any]:
-#     """Handle customer name search and general search by finding matching users first"""
-#     search_term = query.pop("_search_term", None)
-#     customer_name = query.pop("_customer_name_search", None)
-    
-#     # Combine both search terms
-#     search_names = []
-#     if search_term:
-#         search_names.append(search_term)
-#     if customer_name:
-#         search_names.append(customer_name)
-    
-#     if not search_names:
-#         return query
-    
-#     try:
-#         # Create regex patterns for all search terms
-#         name_conditions = []
-#         for name in search_names:
-#             name_conditions.append({"name": {"$regex": name, "$options": "i"}})
-#             name_conditions.append({"email": {"$regex": name, "$options": "i"}})
-#             name_conditions.append({"phone": {"$regex": name, "$options": "i"}})
-        
-#         # Find users with matching names, emails, or phones
-#         matching_users = await db.find_many(
-#             "users", 
-#             {"$or": name_conditions},
-#             projection={"_id": 1}
-#         )
-        
-#         if matching_users:
-#             user_ids = [user["_id"] for user in matching_users]
-            
-#             # Add user filter to existing query conditions
-#             if "$and" in query:
-#                 # Add user search as another condition in $and
-#                 query["$and"].append({"user": {"$in": user_ids}})
-#             elif "$or" in query:
-#                 # If we have $or conditions (like order ID search), combine with user search
-#                 existing_or = query.pop("$or")
-#                 query["$and"] = [
-#                     {"$or": existing_or},
-#                     {"user": {"$in": user_ids}}
-#                 ]
-#             else:
-#                 query["user"] = {"$in": user_ids}
-#         else:
-#             # No matching users found for search term
-#             logger.info(f"No users found matching search terms: {search_names}")
-#             # Don't return empty result, let order ID search work
-        
-#         return query
-        
-#     except Exception as e:
-#         logger.error(f"Error handling customer name search: {e}")
-#         return query
-
-# Enhanced send_orders function with customer name search
-# async def send_orders_enhanced(websocket: WebSocket, filters: dict, db):
-#     """Enhanced send_orders with customer name search support"""
-#     try:
-#         # Build initial query
-#         query = await build_orders_query(filters)
-        
-#         # Handle customer name search if needed
-#         query = await handle_customer_name_search(query, db)
-        
-#         # Continue with the rest of send_orders logic...
-#         # (Copy the rest of the send_orders function here)
-        
-#     except Exception as e:
-#         logger.error(f"Error in enhanced send_orders: {e}")
-#         await websocket.send_json({
-#             "type": "error",
-#             "message": "Failed to fetch orders"
-#         })
 
 async def update_order_status(websocket: WebSocket, data: dict, user_info: dict, db):
     """Update order status with correct field mappings"""
@@ -470,68 +379,34 @@ async def assign_delivery_partner(websocket: WebSocket, data: dict, db):
         })
 
 # Performance optimization functions
-async def create_orders_indexes(db):
-    """Create optimized indexes for orders collection"""
-    try:
-        # Compound index for common queries
-        await db.create_index("orders", [
-            ("order_status", 1),
-            ("created_at", -1)
-        ])
+# async def create_orders_indexes(db):
+#     """Create optimized indexes for orders collection"""
+#     try:
+#         # Compound index for common queries
+#         await db.create_index("orders", [
+#             ("order_status", 1),
+#             ("created_at", -1)
+#         ])
         
-        # Index for date range queries
-        await db.create_index("orders", [("created_at", -1)])
+#         # Index for date range queries
+#         await db.create_index("orders", [("created_at", -1)])
         
-        # Index for amount queries
-        await db.create_index("orders", [("total_amount", 1)])
+#         # Index for amount queries
+#         await db.create_index("orders", [("total_amount", 1)])
         
-        # Index for delivery partner queries
-        await db.create_index("orders", [("delivery_partner", 1)])
+#         # Index for delivery partner queries
+#         await db.create_index("orders", [("delivery_partner", 1)])
         
-        # Index for user queries (for customer name search)
-        await db.create_index("orders", [("user", 1)])
+#         # Index for user queries (for customer name search)
+#         await db.create_index("orders", [("user", 1)])
         
-        # Text index for order_id search
-        await db.create_index("orders", [("order_id", 1)])
+#         # Text index for order_id search
+#         await db.create_index("orders", [("order_id", 1)])
         
-        logger.info("Orders indexes created successfully")
+#         logger.info("Orders indexes created successfully")
         
-    except Exception as e:
-        logger.error(f"Error creating orders indexes: {e}")
-
-async def get_orders_analytics(websocket: WebSocket, filters: dict, db):
-    """Get orders analytics for dashboard"""
-    try:
-        # Build base query
-        query = await build_orders_query(filters)
-        # query = await handle_customer_name_search(query, db)
-        
-        # Aggregation pipeline for analytics
-        pipeline = [
-            {"$match": query},
-            {
-                "$group": {
-                    "_id": "$order_status",
-                    "count": {"$sum": 1},
-                    "total_amount": {"$sum": "$total_amount"},
-                    "avg_amount": {"$avg": "$total_amount"}
-                }
-            }
-        ]
-        
-        analytics = await db.aggregate("orders", pipeline)
-        
-        await websocket.send_json({
-            "type": "orders_analytics",
-            "analytics": list(analytics)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting orders analytics: {e}")
-        await websocket.send_json({
-            "type": "error",
-            "message": "Failed to get orders analytics"
-        })
+#     except Exception as e:
+#         logger.error(f"Error creating orders indexes: {e}")
 
 async def get_orders_for_download(websocket: WebSocket, filters: dict, db):
     """Get orders for CSV download with specified filters"""

@@ -192,5 +192,5 @@ class WebSocketService {
 }
 
 // Create singleton instance
-// export const wsService = new WebSocketService('ws://localhost:8000/admin/ws');
-export const wsService = new WebSocketService('wss://smartbag-backend-oqlt.onrender.com/admin/ws');
+export const wsService = new WebSocketService('ws://localhost:8000/admin/ws');
+// export const wsService = new WebSocketService('wss://smartbag-backend-oqlt.onrender.com/admin/ws');
