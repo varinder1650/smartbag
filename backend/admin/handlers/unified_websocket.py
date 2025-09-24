@@ -6,6 +6,7 @@ import logging
 from admin.handlers.products import send_products, create_product, delete_product, update_product
 from admin.handlers.brand import send_brands, create_brand, update_brand, delete_brand
 from admin.handlers.orders import send_orders,update_order_status,get_delivery_requests_for_order,assign_delivery_partner,get_orders_for_download
+# from admin.handlers.analytics import get_orders_analytics
 from admin.handlers.category import send_categories, create_categories, update_category, delete_category
 from admin.handlers.customers import send_customers
 from admin.handlers.help import get_tickets

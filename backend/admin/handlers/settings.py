@@ -29,9 +29,14 @@ async def send_inventory_status(websocket: WebSocket, db):
         })
 
 async def handle_get_analytics(websocket: WebSocket, data: dict, db):
-    """Get analytics data"""
+    """Get analytics data with orders for dashboard"""
     try:
         period = data.get("period", "week")
+        filters = data.get("filters", {})
+        
+        logger.info(f"=== ANALYTICS REQUEST ===")
+        logger.info(f"Period: {period}")
+        logger.info(f"Filters: {filters}")
         
         # Calculate date range
         end_date = datetime.utcnow()
@@ -44,42 +49,111 @@ async def handle_get_analytics(websocket: WebSocket, data: dict, db):
         else:
             start_date = end_date - timedelta(days=7)
 
-        # Get basic counts
-        total_orders = await db.count_documents("orders", {
-            "created_at": {"$gte": start_date, "$lte": end_date}
-        })
+        logger.info(f"Date range: {start_date} to {end_date}")
+
+        # Get all orders (not just for period) for dashboard
+        logger.info("Fetching all orders...")
+        all_orders = await db.find_many("orders", {}, sort=[("created_at", -1)])
+        logger.info(f"Found {len(all_orders)} total orders")
         
-        total_products = await db.count_documents("products", {})
-        total_users = await db.count_documents("users", {"role": "customer"})
+        if len(all_orders) == 0:
+            logger.warning("No orders found in database!")
+            await websocket.send_json({
+                "type": "analytics_data",
+                "orders": [],
+                "analytics": {
+                    "period": period,
+                    "total_orders": 0,
+                    "total_revenue": 0,
+                    "total_products": await db.count_documents("products", {}),
+                    "total_users": await db.count_documents("users", {}),
+                }
+            })
+            return
         
-        # Calculate revenue from delivered orders
-        delivered_orders = await db.find_many("orders", {
-            "created_at": {"$gte": start_date, "$lte": end_date},
-            "status": "delivered"
-        })
+        # Serialize orders for frontend
+        serialized_orders = []
         
+        # Batch fetch users for order data
+        user_ids = [order.get("user") for order in all_orders if order.get("user")]
+        users_dict = {}
+        if user_ids:
+            logger.info(f"Fetching user data for {len(user_ids)} users...")
+            users = await db.find_many("users", {"_id": {"$in": user_ids}})
+            users_dict = {str(user["_id"]): user for user in users}
+            logger.info(f"Found {len(users)} users")
+        
+        # Batch fetch delivery partners
+        delivery_partner_ids = [order.get("delivery_partner") for order in all_orders 
+                             if order.get("delivery_partner")]
+        delivery_partners_dict = {}
+        if delivery_partner_ids:
+            partners = await db.find_many("users", {"_id": {"$in": delivery_partner_ids}})
+            delivery_partners_dict = {str(partner["_id"]): partner for partner in partners}
+        
+        for order in all_orders:
+            try:
+                # Get user info
+                user_id = str(order.get("user", ""))
+                user = users_dict.get(user_id, {})
+                
+                # Get delivery partner info
+                delivery_partner_id = str(order.get("delivery_partner", "")) if order.get("delivery_partner") else None
+                delivery_partner = delivery_partners_dict.get(delivery_partner_id) if delivery_partner_id else None
+                
+                serialized_order = serialize_document(order)
+                # Add frontend-friendly mappings
+                serialized_order["id"] = serialized_order["_id"]
+                serialized_order["total"] = serialized_order.get("total_amount", 0)
+                serialized_order["status"] = serialized_order.get("order_status", "pending")
+                serialized_order["user_name"] = user.get("name", "Unknown")
+                serialized_order["user_email"] = user.get("email", "")
+                serialized_order["user_phone"] = user.get("phone", "")
+                serialized_order["delivery_partner_name"] = (
+                    delivery_partner.get("name") if delivery_partner else None
+                )
+                
+                serialized_orders.append(serialized_order)
+            except Exception as e:
+                logger.error(f"Error serializing order {order.get('_id', 'unknown')}: {e}")
+                continue
+        
+        logger.info(f"Serialized {len(serialized_orders)} orders")
+        
+        # Calculate analytics
+        total_orders = len(serialized_orders)
+        delivered_orders = [order for order in serialized_orders if order.get("status") == "delivered"]
         total_revenue = sum(order.get("total", 0) for order in delivered_orders)
         
-        analytics = {
-            "period": period,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "total_orders": total_orders,
-            "total_revenue": total_revenue,
-            "total_products": total_products,
-            "total_users": total_users,
+        logger.info(f"Analytics calculated:")
+        logger.info(f"  Total orders: {total_orders}")
+        logger.info(f"  Delivered orders: {len(delivered_orders)}")
+        logger.info(f"  Total revenue: {total_revenue}")
+        
+        response_data = {
+            "type": "analytics_data",
+            "orders": serialized_orders,
+            "analytics": {
+                "period": period,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "total_orders": total_orders,
+                "total_revenue": total_revenue,
+                "total_products": await db.count_documents("products", {}),
+                "total_users": await db.count_documents("users", {}),
+            }
         }
         
-        await websocket.send_json({
-            "type": "analytics_data",
-            "analytics": analytics
-        })
+        logger.info(f"Sending response with {len(serialized_orders)} orders")
+        await websocket.send_json(response_data)
         
     except Exception as e:
         logger.error(f"Error getting analytics: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         await websocket.send_json({
             "type": "error",
-            "message": "Failed to fetch analytics"
+            "message": f"Failed to fetch analytics: {str(e)}"
         })
 
 async def get_pricing_config(websocket: WebSocket, db):

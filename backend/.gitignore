@@ -1,1 +1,3 @@
+.gitignore
 __pycache__
+backend/admin/handlers/__pycache__

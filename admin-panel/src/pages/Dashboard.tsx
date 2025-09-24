@@ -284,20 +284,52 @@ export default function Dashboard() {
 
   // Request initial data and set up real-time handlers
   useEffect(() => {
+    console.log('=== DASHBOARD LOADING ===');
+    console.log('Sending requests for dashboard data...');
+    
     wsService.send({ type: 'get_products' });
-    wsService.send({ type: 'get_orders', filters: {} });
+    wsService.send({ 
+      type: 'get_analytics', 
+      period: 'month',  // Add period parameter
+      filters: {}       // Keep filters for future use
+    });
     wsService.send({ type: 'get_users', filters: {} });
 
     const handleProductsData = (data: any) => {
-      console.log('Dashboard received products data');
+      console.log('Dashboard received products data:', data.products?.length || 0, 'products');
       setProducts(data.products || []);
       calculateStats();
     };
 
-    const handleOrdersData = (data: any) => {
-      console.log('Dashboard received orders data');
-      setOrders(data.orders || []);
-      setRecentOrders(data.orders?.slice(0, 10) || []);
+    const handleAnalyticsData = (data: any) => {
+      console.log('=== ANALYTICS DATA RECEIVED ===');
+      console.log('Orders:', data.orders?.length || 0);
+      console.log('Analytics:', data.analytics);
+      
+      // Handle orders data if present (for chart generation)
+      if (data.orders && Array.isArray(data.orders)) {
+        console.log('Setting orders:', data.orders.length);
+        setOrders(data.orders);
+        setRecentOrders(data.orders.slice(0, 10));
+      } else {
+        console.warn('No orders data received or invalid format');
+      }
+      
+      // Handle analytics data for stats
+      if (data.analytics) {
+        console.log('Setting analytics data');
+        const analytics = data.analytics;
+        setStats({
+          totalRevenue: analytics.total_revenue || 0,
+          totalOrders: analytics.total_orders || 0,
+          activeOrders: 0, // Will be calculated from orders
+          activeUsers: analytics.total_users || 0,
+          totalProducts: analytics.total_products || 0,
+        });
+      } else {
+        console.warn('No analytics data received');
+      }
+      
       calculateStats();
     };
 
@@ -319,13 +351,13 @@ export default function Dashboard() {
     };
 
     wsService.onMessage("products_data", handleProductsData);
-    wsService.onMessage("orders_data", handleOrdersData);
+    wsService.onMessage("analytics_data", handleAnalyticsData);
     wsService.onMessage("users_data", handleUsersData);
     wsService.onMessage("error", handleError);
 
     return () => {
       wsService.onMessage("products_data", () => {});
-      wsService.onMessage("orders_data", () => {});
+      wsService.onMessage("analytics_data", () => {});
       wsService.onMessage("users_data", () => {});
       wsService.onMessage("error", () => {});
     };
