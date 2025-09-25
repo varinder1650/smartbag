@@ -75,6 +75,7 @@ export default function UserSuggestions() {
   const [adminNotes, setAdminNotes] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState("");
 
   const statusOptions = [
     { value: "all", label: "All Status" },
@@ -181,7 +182,7 @@ export default function UserSuggestions() {
       data: {
         suggestion_id: suggestionId,
         status: newStatus,
-        admin_notes: adminNotes
+        // admin_notes: adminNotes
       }
     });
 
@@ -215,6 +216,7 @@ export default function UserSuggestions() {
   const openDetailsModal = (suggestion: UserSuggestion) => {
     setSelectedSuggestion(suggestion);
     setAdminNotes(suggestion.admin_notes || "");
+    setSelectedStatus(suggestion.status || "");
     setShowDetailsModal(true);
   };
 
@@ -285,7 +287,7 @@ export default function UserSuggestions() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {suggestions.filter(s => s.status === 'submitted' || s.status === 'under_review').length}
+              {suggestions.filter(s => s.status === 'pending' || s.status === 'under_review').length}
             </div>
             <p className="text-xs text-muted-foreground">Needs attention</p>
           </CardContent>
@@ -319,17 +321,14 @@ export default function UserSuggestions() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg. Votes</CardTitle>
+            <CardTitle className="text-sm font-medium">Rejected</CardTitle>
             <Star className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {suggestions.length > 0 
-                ? (suggestions.reduce((sum, s) => sum + getVoteScore(s), 0) / suggestions.length).toFixed(1)
-                : '0.0'
-              }
+              {suggestions.filter(s => s.status === 'rejected').length}
             </div>
-            <p className="text-xs text-muted-foreground">User rating</p>
+            {/* <p className="text-xs text-muted-foreground">User rating</p> */}
           </CardContent>
         </Card>
       </div>
@@ -497,7 +496,7 @@ export default function UserSuggestions() {
           </Card>
 
           {/* Quick Stats */}
-          <Card>
+          {/* <Card>
             <CardHeader>
               <CardTitle>Quick Stats</CardTitle>
               <CardDescription>At a glance metrics</CardDescription>
@@ -528,7 +527,7 @@ export default function UserSuggestions() {
                 </Badge>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
       </div>
 
@@ -596,12 +595,12 @@ export default function UserSuggestions() {
                         </div>
                       </div>
 
-                      <div>
+                      {/* <div>
                         <h4 className="font-medium mb-2">Implementation</h4>
                         <Badge variant={implementationStatusColors[selectedSuggestion.implementation_status as keyof typeof implementationStatusColors] || "secondary"}>
                           {selectedSuggestion.implementation_status || 'Not Set'}
                         </Badge>
-                      </div>
+                      </div> */}
                     </div>
 
                     {selectedSuggestion.estimated_effort && (
@@ -633,7 +632,10 @@ export default function UserSuggestions() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="new-status">New Status</Label>
-                      <Select defaultValue={selectedSuggestion.status}>
+                      <Select 
+                        value={selectedStatus}
+                        onValueChange={setSelectedStatus}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -647,7 +649,7 @@ export default function UserSuggestions() {
                       </Select>
                     </div>
 
-                    <div className="space-y-2">
+                    {/* <div className="space-y-2">
                       <Label htmlFor="admin-notes">Admin Notes</Label>
                       <Textarea
                         id="admin-notes"
@@ -656,16 +658,16 @@ export default function UserSuggestions() {
                         onChange={(e) => setAdminNotes(e.target.value)}
                         rows={4}
                       />
-                    </div>
+                    </div> */}
 
                     <div className="flex gap-2">
                       <Button 
                         className="flex-1"
-                        onClick={() => handleStatusChange(selectedSuggestion._id || selectedSuggestion.id, 'approved')}
-                        disabled={isUpdating}
+                        onClick={() => handleStatusChange(selectedSuggestion._id || selectedSuggestion.id, selectedStatus)}
+                        disabled={isUpdating || !selectedStatus}
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Approve
+                        Update Status
                       </Button>
                       <Button 
                         variant="destructive" 
@@ -680,7 +682,7 @@ export default function UserSuggestions() {
                   </CardContent>
                 </Card>
 
-                <Card>
+                {/* <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Implementation Planning</CardTitle>
                     <CardDescription>Track development progress</CardDescription>
@@ -738,7 +740,7 @@ export default function UserSuggestions() {
                       )}
                     </Button>
                   </CardContent>
-                </Card>
+                </Card> */}
               </div>
             </div>
           )}
