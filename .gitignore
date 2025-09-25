@@ -1,0 +1,47 @@
+# ---- Global ignores ----
+.env
+*.env
+.DS_Store
+*.log
+*.sqlite3
+__pycache__/
+*.pyc
+
+# ---- Node.js (frontend + mobile-app) ----
+**/node_modules/
+**/dist/
+**/.next/
+**/.expo/
+**/.expo-shared/
+**/coverage/
+**/build/
+
+# ---- React / Vite (admin-panel) ----
+admin-panel/.vite/
+admin-panel/.turbo/
+admin-panel/.parcel-cache/
+admin-panel/.cache/
+
+# ---- React Native / Expo (mobile-app) ----
+mobile-app/android/
+mobile-app/ios/
+mobile-app/.gradle/
+mobile-app/.idea/
+mobile-app/expo-debug.log
+mobile-app/.watchmanconfig
+mobile-app/.DS_Store
+mobile-app/.bundle/
+mobile-app/expo-build/
+
+# ---- Python (backend) ----
+backend/venv/
+backend/.env
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/.coverage
+backend/coverage.xml
+backend/*.db
+backend/*.sqlite3
+
+# ---- OS files ----
+Thumbs.db

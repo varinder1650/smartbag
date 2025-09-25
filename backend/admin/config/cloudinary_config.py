@@ -1,6 +1,5 @@
 import cloudinary
 import cloudinary.uploader
-import cloudinary.api
 from cloudinary.utils import cloudinary_url
 import os
 from dotenv import load_dotenv
