@@ -4,6 +4,10 @@ from admin.app import create_admin_app
 from contextlib import asynccontextmanager
 import logging
 from db.db_manager import get_database
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(
     level = logging.INFO,
@@ -65,18 +69,29 @@ app.state.ws_app = ws_app
 app.mount("/api",customer_app)
 app.mount("/admin",ws_app)
 
+ENV = os.getenv('ENVIRONMENT')
+
 @app.get("/")
 async def root():
     return {
-        "message": "SmartBag"
+        "message": "SmartBag",
+        "environment": ENV
     }
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port = 8000,
-        reload = True
-    )
+    if ENV == 'Development':
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port = 8000,
+            reload = True
+        )
+    else:
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port = 80,
+            reload = True
+        )

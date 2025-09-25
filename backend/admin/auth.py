@@ -4,10 +4,13 @@ import jwt
 from passlib.context import CryptContext
 import os
 from jwt import ExpiredSignatureError, InvalidTokenError
+from dotenv import load_dotenv
+
+load_dotenv()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
-ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
 
 async def authenticate_admin(credentials: dict):
     """Authenticate admin user"""

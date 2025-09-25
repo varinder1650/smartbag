@@ -1,7 +1,7 @@
-from ast import expr_context
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 import logging
+from dotenv import load_dotenv
 import os
 from datetime import timedelta,datetime
 from app.services.auth_service import AuthService
@@ -14,6 +14,8 @@ from app.utils.auth import create_refresh_token, get_current_user,create_access_
 # from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from jose import JWTError, jwt
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

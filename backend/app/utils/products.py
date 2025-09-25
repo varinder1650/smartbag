@@ -1,12 +1,9 @@
-from db.db_connection import get_connection
 from dotenv import load_dotenv
 import os
 from db.db_manager import get_database
 
 load_dotenv()
 
-# client = get_connection()
-# db = client[os.getenv('DB_NAME')]
 db = get_database()
 
 async def get_all_products():
