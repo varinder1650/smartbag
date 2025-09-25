@@ -106,7 +106,7 @@
     "userInterfaceStyle": "light",
     "scheme": "smartbag",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -114,8 +114,8 @@
       "**/*"
     ],
     "extra": {
-      "EXPO_PUBLIC_API_URL": "http://10.0.0.88:8000/api/",
-      "EXPO_PUBLIC_API_URL_PROD": "https://smartbag-backend-oqlt.onrender.com",
+      "EXPO_PUBLIC_API_URL_DEV": "http://10.0.0.88:8000/api/",
+      "EXPO_PUBLIC_API_URL": "https://smartbag-backend-oqlt.onrender.com/api",
       "EXPO_PUBLIC_OLA_KRUTRIM_API_KEY": "dzfpTC3yjmbi4eQLsDzBwBdGyYYdZXN80BFR73kQ",
       "eas": {
         "projectId": "37775160-3c66-48ef-988a-82efae359109"
