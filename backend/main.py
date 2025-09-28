@@ -42,7 +42,7 @@ async def create_indexes(db):
     try:
         #user indexing
         await db.db['users'].create_index("email",unique = True)
-        await db.db['users'].create_index('phone',unique=True)
+        # await db.db['users'].create_index('phone',unique=True)
         await db.db['users'].create_index('role')
 
         #product indexing
