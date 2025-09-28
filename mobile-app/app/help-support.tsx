@@ -13,6 +13,7 @@ import {
   Modal,
   FlatList,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,8 +33,11 @@ interface SupportTicket {
   subject: string;
   message: string;
   status: string;
+  priority?: string;
   created_at: string;
   admin_response?: string;
+  message_count?: number;
+  has_new_admin_response?: boolean;
 }
 
 const SUPPORT_CATEGORIES: SupportCategory[] = [
@@ -46,6 +50,8 @@ const SUPPORT_CATEGORIES: SupportCategory[] = [
   { value: 'account_issue', label: 'Account Issue', description: 'Problems with your account' },
   { value: 'other', label: 'Other', description: 'General queries' },
 ];
+
+const WHATSAPP_NUMBER = '+911234567890';
 
 export default function HelpSupportScreen() {
   const { token, user } = useAuth();
@@ -138,6 +144,47 @@ export default function HelpSupportScreen() {
     }
   };
 
+  const openWhatsAppSupport = () => {
+    const message = `Hi SmartBag Support! 👋
+
+I need assistance with my account.
+
+User: ${user?.name} (${user?.email})
+Time: ${new Date().toLocaleString('en-IN')}
+
+Please help me with my inquiry.
+
+Thank you!`;
+
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `whatsapp://send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
+    
+    Linking.canOpenURL(whatsappUrl)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(whatsappUrl);
+        } else {
+          // Fallback to web WhatsApp
+          const webWhatsAppUrl = `https://wa.me/${WHATSAPP_NUMBER.replace('+', '')}?text=${encodedMessage}`;
+          return Linking.openURL(webWhatsAppUrl);
+        }
+      })
+      .catch((error) => {
+        console.error('WhatsApp opening error:', error);
+        Alert.alert(
+          'WhatsApp Not Available',
+          'WhatsApp is not installed. Would you like to call support instead?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Call Support', 
+              onPress: () => Linking.openURL(`tel:${WHATSAPP_NUMBER}`)
+            }
+          ]
+        );
+      });
+  };
+
   const handleSubmit = async () => {
     if (!selectedCategory) {
       Alert.alert('Error', 'Please select a category');
@@ -161,6 +208,7 @@ export default function HelpSupportScreen() {
         subject: subject.trim(),
         message: message.trim(),
         order_id: orderId.trim() || null,
+        priority: 'medium', // Default priority
       };
 
       const response = await fetch(`${API_BASE_URL}support/tickets`, {
@@ -205,17 +253,24 @@ export default function HelpSupportScreen() {
     }
   };
 
-  // NEW: Render individual ticket card
+  // Enhanced render ticket with navigation and indicators
   const renderTicket = ({ item }: { item: SupportTicket }) => (
-    <View style={styles.ticketCard}>
+    <TouchableOpacity 
+      style={styles.ticketCard}
+      onPress={() => router.push(`/ticket-detail/${item._id}`)}
+      activeOpacity={0.7}
+    >
       <View style={styles.ticketHeader}>
         <View style={styles.ticketInfo}>
           <Text style={styles.ticketSubject} numberOfLines={1}>{item.subject}</Text>
           <Text style={styles.ticketCategory}>{getCategoryLabel(item.category)}</Text>
           <Text style={styles.ticketDate}>{formatDate(item.created_at)}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+        <View style={styles.ticketStatusContainer}>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+            <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#ccc" style={styles.chevronIcon} />
         </View>
       </View>
       
@@ -223,15 +278,30 @@ export default function HelpSupportScreen() {
         {item.message}
       </Text>
       
-      {item.admin_response && (
-        <View style={styles.adminResponse}>
-          <Text style={styles.adminResponseLabel}>Admin Response:</Text>
-          <Text style={styles.adminResponseText} numberOfLines={2}>
-            {item.admin_response}
-          </Text>
-        </View>
-      )}
-    </View>
+      {/* Show indicators for new responses or message count */}
+      <View style={styles.ticketFooter}>
+        {item.has_new_admin_response && (
+          <View style={styles.newResponseIndicator}>
+            <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+            <Text style={styles.newResponseText}>New Response</Text>
+          </View>
+        )}
+        
+        {item.message_count && item.message_count > 0 && (
+          <View style={styles.messageCountIndicator}>
+            <Ionicons name="chatbubbles" size={14} color="#007AFF" />
+            <Text style={styles.messageCountText}>{item.message_count} messages</Text>
+          </View>
+        )}
+        
+        {item.status === 'in_progress' && (
+          <View style={styles.activeIndicator}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeText}>Active</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
   );
 
   const renderCategorySelector = () => {
@@ -303,7 +373,6 @@ export default function HelpSupportScreen() {
     </Modal>
   );
 
-  // NEW: Form moved to modal
   const renderCreateForm = () => (
     <Modal
       visible={showCreateForm}
@@ -388,7 +457,6 @@ export default function HelpSupportScreen() {
     </Modal>
   );
 
-  // MAIN RETURN - NEW STRUCTURE
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -397,10 +465,40 @@ export default function HelpSupportScreen() {
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help & Support</Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity onPress={openWhatsAppSupport} style={styles.whatsappHeaderButton}>
+          <Ionicons name="logo-whatsapp" size={24} color="#25D366" />
+        </TouchableOpacity>
       </View>
 
-      {/* Tickets List - THIS IS THE NEW MAIN CONTENT */}
+      {/* Quick Contact Section */}
+      <View style={styles.quickContactSection}>
+        <Text style={styles.quickContactTitle}>Need Immediate Help?</Text>
+        <View style={styles.quickContactButtons}>
+          <TouchableOpacity style={styles.whatsappQuickButton} onPress={openWhatsAppSupport}>
+            <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+            <Text style={styles.whatsappQuickText}>WhatsApp</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.callQuickButton}
+            onPress={() => Linking.openURL(`tel:${WHATSAPP_NUMBER}`)}
+          >
+            <Ionicons name="call" size={20} color="#fff" />
+            <Text style={styles.callQuickText}>Call Us</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.emailQuickButton}
+            onPress={() => Linking.openURL('mailto:support@smartbag.com')}
+          >
+            <Ionicons name="mail" size={20} color="#fff" />
+            <Text style={styles.emailQuickText}>Email</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.supportHours}>Support Hours: Mon-Fri, 9 AM - 6 PM</Text>
+      </View>
+
+      {/* Tickets List */}
       {loadingTickets ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
@@ -428,14 +526,14 @@ export default function HelpSupportScreen() {
               {/* Contact Info in Empty State */}
               <View style={styles.contactSection}>
                 <Text style={styles.contactTitle}>Other ways to reach us:</Text>
-                <View style={styles.contactItem}>
+                <TouchableOpacity style={styles.contactItem} onPress={() => Linking.openURL('mailto:support@smartbag.com')}>
                   <Ionicons name="mail-outline" size={20} color="#666" />
                   <Text style={styles.contactText}>support@smartbag.com</Text>
-                </View>
-                <View style={styles.contactItem}>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.contactItem} onPress={() => Linking.openURL(`tel:${WHATSAPP_NUMBER}`)}>
                   <Ionicons name="call-outline" size={20} color="#666" />
-                  <Text style={styles.contactText}>+91 1234567890</Text>
-                </View>
+                  <Text style={styles.contactText}>{WHATSAPP_NUMBER}</Text>
+                </TouchableOpacity>
                 <View style={styles.contactItem}>
                   <Ionicons name="time-outline" size={20} color="#666" />
                   <Text style={styles.contactText}>Mon-Fri, 9 AM - 6 PM</Text>
@@ -446,7 +544,7 @@ export default function HelpSupportScreen() {
         />
       )}
 
-      {/* Floating Create Button - THIS IS THE NEW CREATE BUTTON */}
+      {/* Floating Create Button */}
       <TouchableOpacity
         style={styles.createButton}
         onPress={() => setShowCreateForm(true)}
@@ -454,7 +552,7 @@ export default function HelpSupportScreen() {
         <Ionicons name="add" size={24} color="#fff" />
       </TouchableOpacity>
 
-      {/* Create Form Modal - THIS IS WHERE THE FORM MOVED */}
+      {/* Create Form Modal */}
       {renderCreateForm()}
     </SafeAreaView>
   );
@@ -483,8 +581,88 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  whatsappHeaderButton: {
+    padding: 8,
+  },
   placeholder: {
     width: 40,
+  },
+  quickContactSection: {
+    backgroundColor: '#fff',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  quickContactTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  quickContactButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  whatsappQuickButton: {
+    flex: 1,
+    backgroundColor: '#25D366',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  whatsappQuickText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  callQuickButton: {
+    flex: 1,
+    backgroundColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 3,
+  },
+  callQuickText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  emailQuickButton: {
+    flex: 1,
+    backgroundColor: '#FF9500',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  emailQuickText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  supportHours: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   loadingContainer: {
     flex: 1,
@@ -497,7 +675,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 16,
   },
-  // NEW: Tickets list styles
   ticketsList: {
     flex: 1,
   },
@@ -542,41 +719,73 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
   },
+  ticketStatusContainer: {
+    alignItems: 'flex-end',
+  },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     minWidth: 60,
     alignItems: 'center',
+    marginBottom: 4,
   },
   statusText: {
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
   },
+  chevronIcon: {
+    marginTop: 4,
+  },
   ticketMessage: {
     fontSize: 14,
     color: '#666',
     lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  adminResponse: {
-    backgroundColor: '#f0f8ff',
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#007AFF',
+  ticketFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
-  adminResponseLabel: {
+  newResponseIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  newResponseText: {
     fontSize: 12,
+    color: '#34C759',
     fontWeight: '600',
-    color: '#007AFF',
-    marginBottom: 4,
+    marginLeft: 4,
   },
-  adminResponseText: {
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 18,
+  messageCountIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  messageCountText: {
+    fontSize: 12,
+    color: '#007AFF',
+    marginLeft: 4,
+  },
+  activeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#007AFF',
+    marginRight: 6,
+  },
+  activeText: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
@@ -599,7 +808,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 32,
   },
-  // NEW: Floating create button
   createButton: {
     position: 'absolute',
     bottom: 20,
@@ -616,7 +824,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  // NEW: Create form modal styles
   createFormContainer: {
     flex: 1,
     backgroundColor: '#f8f9fa',
@@ -741,11 +948,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 12,
+    textAlign: 'center',
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    justifyContent: 'center',
   },
   contactText: {
     fontSize: 14,
