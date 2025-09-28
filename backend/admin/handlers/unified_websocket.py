@@ -8,7 +8,7 @@ from admin.handlers.brand import send_brands, create_brand, update_brand, delete
 from admin.handlers.orders import send_orders,update_order_status,get_delivery_requests_for_order,assign_delivery_partner,get_orders_for_download
 from admin.handlers.category import send_categories, create_categories, update_category, delete_category
 from admin.handlers.customers import send_customers
-from admin.handlers.help import get_tickets
+from admin.handlers.help import get_tickets,get_ticket_detail,get_ticket_stats,update_ticket_status,respond_to_ticket
 from admin.handlers.requests import get_requests,update_requests_status
 from admin.handlers.coupons import get_coupons,create_coupons,update_coupon,delete_coupon,toggle_coupon
 from admin.handlers.auth import (
@@ -177,6 +177,15 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
             elif msg_type == "get_orders":
                 await send_orders(websocket, message.get("filters", {}), db)
             
+            elif msg_type == "update_order_status":
+                await update_order_status(websocket,message.get("data"),user_info,db)
+
+            elif msg_type == "get_delivery_requests_for_order":
+                await get_delivery_requests_for_order(websocket,message.get("data"),db)
+
+            elif msg_type == "assign_delivery_partner":
+                await assign_delivery_partner(websocket,message.get("data"),db)
+                
             # Categories handlers
             elif msg_type == "get_categories":
                 await send_categories(websocket, db)
@@ -232,29 +241,37 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
             elif msg_type == "get_customers":
                 await send_customers(websocket, db)
 
-            elif msg_type == "logout":
-                logger.info(f"User {user_info.get('email')} logging out")
-                break
-
-            # Order status handler (placeholder)
-            elif msg_type == "update_order_status":
-                await update_order_status(websocket,message.get("data"),user_info,db)
-
-            elif msg_type == "get_delivery_requests_for_order":
-                await get_delivery_requests_for_order(websocket,message.get("data"),db)
-
-            elif msg_type == "assign_delivery_partner":
-                await assign_delivery_partner(websocket,message.get("data"),db)
-
+            #Support tickets
             elif msg_type == "get_help_tickets":
                 await get_tickets(websocket,message.get("filters",{}),db)
+            
+            elif msg_type == "get_ticket_detail":
+                ticket_id = message.get("ticket_id")
+                if ticket_id:
+                    await get_ticket_detail(websocket, {"ticket_id": ticket_id}, db)
+                else:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Ticket ID required for detail view"
+                    })
+                    
+            elif msg_type == "respond_to_ticket":
+                await respond_to_ticket(websocket, message.get("data"), db)
+                
+            elif msg_type == "update_ticket_status":
+                await update_ticket_status(websocket, message.get("data"), db)
+                
+            elif msg_type == "get_ticket_stats":
+                await get_ticket_stats(websocket, message.get("data"), db)
 
+            #User suggestion requests
             elif msg_type == "get_user_suggestions":
                 await get_requests(websocket,message.get("filters",{}),db)
             
             elif msg_type == "update_suggestion_status":
                 await update_requests_status(websocket,message.get("data"),db)
 
+            #Discount coupons
             elif msg_type == "create_discount_coupon":
                 await create_coupons(websocket,message.get("data"),db)
             
@@ -269,6 +286,11 @@ async def handle_admin_messages(websocket: WebSocket, user_info: dict):
 
             elif msg_type == "toggle_coupon_status":
                 await toggle_coupon(websocket,message.get("data"),db)
+
+            #Logout
+            elif msg_type == "logout":
+                logger.info(f"User {user_info.get('email')} logging out")
+                break
 
             else:
                 logger.warning(f"Unknown message type: {msg_type}")

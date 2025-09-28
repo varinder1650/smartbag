@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
@@ -76,3 +76,32 @@ class ProductRequestResponse(BaseModel):
 
     class Config:
         allow_population_by_field_name = True
+
+class TicketMessageCreate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+
+class TicketMessage(BaseModel):
+    _id: str
+    message: str
+    sender_type: str  # 'user' or 'admin'
+    sender_name: str
+    sender_id: str
+    created_at: datetime
+    attachments: Optional[List[str]] = []
+
+class TicketDetailResponse(BaseModel):
+    _id: str
+    category: str
+    subject: str
+    message: str
+    status: str
+    priority: str = "medium"
+    created_at: datetime
+    updated_at: datetime
+    user_id: str
+    user_name: str
+    user_email: str
+    assigned_to: Optional[str] = None
+    admin_response: Optional[str] = None
+    messages: List[TicketMessage] = []
+    order_id: Optional[str] = None
