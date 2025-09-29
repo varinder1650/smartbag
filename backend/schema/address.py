@@ -40,3 +40,6 @@ class GeocodeRequest(BaseModel):
 class ReverseGeocodeRequest(BaseModel):
     latitude: float
     longitude: float
+
+class AddressSearchRequest(BaseModel):
+    query: str

@@ -51,7 +51,7 @@ const SUPPORT_CATEGORIES: SupportCategory[] = [
   { value: 'other', label: 'Other', description: 'General queries' },
 ];
 
-const WHATSAPP_NUMBER = '+911234567890';
+const WHATSAPP_NUMBER = '+16173194514';
 
 export default function HelpSupportScreen() {
   const { token, user } = useAuth();
@@ -314,7 +314,14 @@ Thank you!`;
       >
         <View style={styles.categorySelectorContent}>
           <Text style={styles.categorySelectorLabel}>Category *</Text>
-          <Text style={[styles.categorySelectorText, !selectedCategory && styles.placeholder]}>
+          <Text 
+            style={[
+              styles.categorySelectorText, 
+              !selectedCategory && styles.placeholder
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {selectedCategoryData ? selectedCategoryData.label : 'Select a category'}
           </Text>
         </View>
@@ -586,6 +593,7 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+    color: '#999',
   },
   quickContactSection: {
     backgroundColor: '#fff',
@@ -871,9 +879,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 16,
     marginBottom: 16,
+    minHeight: 60,
   },
   categorySelectorContent: {
     flex: 1,
+    marginRight: 12,
   },
   categorySelectorLabel: {
     fontSize: 12,
