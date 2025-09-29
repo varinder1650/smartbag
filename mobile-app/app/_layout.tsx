@@ -9,8 +9,6 @@ import { useEffect } from 'react';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-// import EnhancedApiDebugger from '../components/EnhancedApiDebugger';
-// import testApiConnection from '../test-api-connection';
 
 export default function RootLayout() {
   return (
@@ -30,13 +28,11 @@ function RootLayoutNav() {
 
   const { token, loading } = useAuth();
 
-  // Add error handling for initialization
   try {
     console.log('RootLayout initializing...');
     
     if (!loaded || loading) {
       console.log('Fonts not loaded yet or Auth loading');
-      // Show a simple loading indicator instead of returning null
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <Text>Loading...</Text>
@@ -45,7 +41,6 @@ function RootLayoutNav() {
     }
   } catch (error) {
     console.error('Error in RootLayout:', error);
-    // Show error state
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
@@ -55,7 +50,6 @@ function RootLayoutNav() {
     );
   }
 
-  // Wrap the entire return in a try-catch for additional safety
   try {
     return (
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -63,10 +57,11 @@ function RootLayoutNav() {
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="auth" options={{ headerShown: false }} />
+          <Stack.Screen name="ticket-detail" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />
-        {/* {__DEV__ && <EnhancedApiDebugger />} */}
+ 
       </ThemeProvider>
     );
   } catch (error) {

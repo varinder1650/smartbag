@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import Constants from 'expo-constants';
 import {
   API_BASE_URL,
   API_ENDPOINTS,
@@ -7,14 +7,16 @@ import {
   API_REQUEST_TIMEOUT,
 } from '../config/apiConfig';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
+import { secureStorage } from '../utils/secureStorage';
+import { InputValidator } from '../utils/validation';
 
 // Type definitions
 interface User {
   _id: string;
-  id?: string; // Add id for compatibility
+  id?: string;
   name: string;
   email: string;
-  phone?: string; // Make phone optional
+  phone?: string;
   role: 'customer' | 'delivery_partner' | 'admin' | 'user';
   address?: string;
   city?: string;
@@ -32,9 +34,11 @@ interface AuthContextType {
   loading: boolean;
   apiUrl: string;
   login: (email: string, password: string) => Promise<LoginResult>;
-  googleLogin: (googleData: any) => Promise<LoginResult>; // Updated signature
+  googleLogin: (googleToken: string, userInfo: any) => Promise<LoginResult>;
   register: (userData: RegisterData) => Promise<RegisterResult>;
-  updatePhone: (phone: string) => Promise<UpdatePhoneResult>; // Add updatePhone
+  updatePhone: (phone: string) => Promise<UpdatePhoneResult>;
+  sendVerificationCode: (phone: string) => Promise<VerificationResult>;
+  verifyPhone: (phone: string, code: string) => Promise<VerificationResult>;
   logout: () => Promise<void>;
   updateProfile: (updatedData: UpdateProfileData) => Promise<UpdateProfileResult>;
   refreshToken: () => Promise<boolean>;
@@ -43,22 +47,22 @@ interface AuthContextType {
 interface LoginResult {
   success: boolean;
   error?: string;
-  requires_phone?: boolean; // Add this for phone flow
+  requires_phone?: boolean;
 }
 
 interface RegisterData {
   name: string;
   email: string;
-  phone?: string; // Make optional
+  phone?: string;
   password: string;
-  confirmPassword?: string; // Make optional
+  confirmPassword?: string;
 }
 
 interface RegisterResult {
   success: boolean;
   error?: string;
   message?: string;
-  requires_phone?: boolean; // Add this for phone flow
+  requires_phone?: boolean;
 }
 
 interface UpdatePhoneResult {
@@ -67,25 +71,19 @@ interface UpdatePhoneResult {
   user?: User;
 }
 
+interface VerificationResult {
+  success: boolean;
+  error?: string;
+}
+
 interface UpdateProfileData {
   name?: string;
-  // phone?: string;
-  // address?: string;
-  // city?: string;
-  // state?: string;
-  // pincode?: string;
 }
 
 interface UpdateProfileResult {
   success: boolean;
   error?: string;
   user?: User;
-}
-
-interface TokenData {
-  token: string;
-  refreshToken?: string;
-  expiresIn?: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -106,7 +104,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [refreshToken, setRefreshTokenState] = useState<string | null>(null);
+  const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
+
+  // Get Google OAuth config from environment
+  const getGoogleConfig = useCallback(() => {
+    const extra = Constants.expoConfig?.extra;
+    return {
+      webClientId: extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+      iosClientId: extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
+    };
+  }, []);
 
   useEffect(() => {
     loadStoredAuth();
@@ -116,11 +123,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Setup token refresh interval
     let refreshInterval: NodeJS.Timeout;
     
-    if (token && refreshToken) {
-      // Refresh token every 15 minutes (adjust based on your token expiry)
+    if (token && refreshTokenValue) {
+      // Refresh token every 14 minutes (tokens usually expire in 15 minutes)
       refreshInterval = setInterval(() => {
         handleTokenRefresh();
-      }, 15 * 60 * 1000); // 15 minutes
+      }, 14 * 60 * 1000);
     }
     
     return () => {
@@ -128,47 +135,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearInterval(refreshInterval);
       }
     };
-  }, [token, refreshToken]);
+  }, [token, refreshTokenValue]);
 
-  const loadStoredAuth = async (): Promise<void> => {
-    try {
-      console.log('Loading stored auth...');
-      const [storedToken, storedUser, storedRefreshToken] = await Promise.all([
-        AsyncStorage.getItem('access_token'), // Updated key to match backend
-        AsyncStorage.getItem('user_data'), // Updated key
-        AsyncStorage.getItem('refresh_token'), // Updated key
-      ]);
-      
-      if (storedToken && storedUser) {
-        console.log('Found stored auth, setting user and token');
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-        setRefreshTokenState(storedRefreshToken);
-        
-        // Check if token is still valid
-        await validateToken(storedToken);
-      } else {
-        console.log('No stored auth found');
-      }
-    } catch (error) {
-      console.error('Error loading stored auth:', error);
-    } finally {
-      setLoading(false);
-    }
+  const clearAuth = async (): Promise<void> => {
+    setToken(null);
+    setUser(null);
+    setRefreshTokenValue(null);
+    await secureStorage.clearAuthData();
   };
 
   const validateToken = async (tokenToValidate: string): Promise<boolean> => {
     try {
-      const response = await fetch(API_ENDPOINTS.PROFILE, {
-        headers: {
-          'Authorization': `Bearer ${tokenToValidate}`,
+      const response = await fetchWithTimeout(
+        API_ENDPOINTS.PROFILE,
+        {
+          headers: {
+            'Authorization': `Bearer ${tokenToValidate}`,
+          },
         },
-      });
+        5000
+      );
       
       if (!response.ok) {
-        // Token is invalid, try to refresh
-        const refreshed = await handleTokenRefresh();
-        return refreshed;
+        // Try to refresh token
+        if (refreshTokenValue) {
+          return await handleTokenRefresh();
+        }
+        return false;
       }
       
       return true;
@@ -178,9 +171,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const loadStoredAuth = async (): Promise<void> => {
+    try {
+      console.log('Loading stored auth from secure storage...');
+      
+      const authData = await secureStorage.getAuthData();
+      
+      if (authData.accessToken && authData.userData) {
+        console.log('Found stored auth, setting user and token');
+        setToken(authData.accessToken);
+        setUser(authData.userData);
+        setRefreshTokenValue(authData.refreshToken);
+        
+        // Validate token
+        const isValid = await validateToken(authData.accessToken);
+        if (!isValid) {
+          console.log('Stored token is invalid, clearing auth');
+          await clearAuth();
+        }
+      } else {
+        console.log('No stored auth found');
+      }
+    } catch (error) {
+      console.error('Error loading stored auth:', error);
+      await clearAuth();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
       console.log('Attempting login for:', email);
+      
+      // Input validation
+      const emailValidation = InputValidator.validateEmail(email);
+      if (!emailValidation.isValid) {
+        return { success: false, error: emailValidation.error };
+      }
+
+      if (!password) {
+        return { success: false, error: 'Password is required' };
+      }
+
       const response = await fetchWithTimeout(
         createApiUrl('auth/login'),
         {
@@ -188,29 +221,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ 
+            email: emailValidation.sanitizedValue, 
+            password 
+          }),
         },
         API_REQUEST_TIMEOUT
       );
 
       const data = await response.json();
-      console.log('Login response:', data);
+      console.log('Login response received');
 
       if (!response.ok) {
-        throw new Error(data.detail || data.message || 'Login failed');
+        const errorMessage = data.detail || data.message || 'Login failed';
+        return { success: false, error: errorMessage };
       }
 
-      // Store tokens
-      setToken(data.access_token);
-      setRefreshTokenState(data.refresh_token);
-      setUser(data.user);
+      // Store authentication data securely
+      await secureStorage.storeAuthData(
+        data.access_token,
+        data.refresh_token,
+        data.user
+      );
 
-      // Save to AsyncStorage with updated keys
-      await Promise.all([
-        AsyncStorage.setItem('access_token', data.access_token),
-        AsyncStorage.setItem('user_data', JSON.stringify(data.user)),
-        data.refresh_token ? AsyncStorage.setItem('refresh_token', data.refresh_token) : Promise.resolve(),
-      ]);
+      setToken(data.access_token);
+      setRefreshTokenValue(data.refresh_token);
+      setUser(data.user);
       
       return { 
         success: true,
@@ -218,7 +254,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
     } catch (error) {
       console.error('Login error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
       return { success: false, error: errorMessage };
     }
   };
@@ -226,50 +262,78 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (userData: RegisterData): Promise<RegisterResult> => {
     try {
       console.log('Attempting registration for:', userData.email);
-      const response = await fetch(createApiUrl('auth/register'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
-
-      const data = await response.json();
-      console.log('Registration response status:', response.status);
-      console.log('Registration response data:', data);
-
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || 'Registration failed');
+      
+      // Input validation
+      const nameValidation = InputValidator.validateName(userData.name);
+      if (!nameValidation.isValid) {
+        return { success: false, error: nameValidation.error };
       }
 
-      // Store tokens if registration includes login
-      if (data.access_token) {
-        setToken(data.access_token);
-        setRefreshTokenState(data.refresh_token);
-        setUser(data.user);
+      const emailValidation = InputValidator.validateEmail(userData.email);
+      if (!emailValidation.isValid) {
+        return { success: false, error: emailValidation.error };
+      }
 
-        await Promise.all([
-          AsyncStorage.setItem('access_token', data.access_token),
-          AsyncStorage.setItem('user_data', JSON.stringify(data.user)),
-          data.refresh_token ? AsyncStorage.setItem('refresh_token', data.refresh_token) : Promise.resolve(),
-        ]);
+      const passwordValidation = InputValidator.validatePassword(userData.password);
+      if (!passwordValidation.isValid) {
+        return { success: false, error: passwordValidation.error };
+      }
+
+      const response = await fetchWithTimeout(
+        createApiUrl('auth/register'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: nameValidation.sanitizedValue,
+            email: emailValidation.sanitizedValue,
+            password: passwordValidation.sanitizedValue,
+          }),
+        },
+        API_REQUEST_TIMEOUT
+      );
+
+      const data = await response.json();
+      console.log('Registration response received');
+
+      if (!response.ok) {
+        const errorMessage = data.detail || data.message || 'Registration failed';
+        return { success: false, error: errorMessage };
+      }
+
+      // Store authentication data if registration includes login
+      if (data.access_token) {
+        await secureStorage.storeAuthData(
+          data.access_token,
+          data.refresh_token,
+          data.user
+        );
+
+        setToken(data.access_token);
+        setRefreshTokenValue(data.refresh_token);
+        setUser(data.user);
       }
 
       return { 
         success: true, 
         message: data.message || 'Registration successful',
-        requires_phone: data.requires_phone !== false // Default to true if missing
+        requires_phone: data.requires_phone !== false
       };
     } catch (error) {
       console.error('Registration error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
       return { success: false, error: errorMessage };
     }
   };
 
   const googleLogin = async (googleToken: string, userInfo: any): Promise<LoginResult> => {
     try {
-      // Send Google token and user info to your backend
+      console.log('Attempting Google login');
+      
+      const googleConfig = getGoogleConfig();
+      
       const response = await fetchWithTimeout(
         createApiUrl('auth/google'),
         {
@@ -281,33 +345,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             googleToken,
             user: {
               googleId: userInfo.googleId,
-              email: userInfo.email,
+              email: userInfo.email?.toLowerCase(),
               name: userInfo.name,
             },
+            clientId: googleConfig.webClientId,
           }),
         },
         API_REQUEST_TIMEOUT
       );
 
       const data = await response.json();
-      // console.log(data)
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Google login failed');
+        const errorMessage = data.message || 'Google login failed';
+        return { success: false, error: errorMessage };
       }
 
-      // Store tokens (same as regular login)
+      // Store authentication data securely
+      await secureStorage.storeAuthData(
+        data.access_token,
+        data.refresh_token,
+        data.user
+      );
+
       setToken(data.access_token);
-      setRefreshTokenState(data.refresh_token);
+      setRefreshTokenValue(data.refresh_token);
       setUser(data.user);
 
-      // Save to AsyncStorage
-      await Promise.all([
-        AsyncStorage.setItem('token', data.access_token),
-        AsyncStorage.setItem('user', JSON.stringify(data.user)),
-        data.refresh_token ? AsyncStorage.setItem('refreshToken', data.refresh_token) : Promise.resolve(),
-      ]);
-
-      return { success: true };
+      return { 
+        success: true,
+        requires_phone: data.requires_phone || false
+      };
     } catch (error) {
       console.error('Google login error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Google login failed';
@@ -317,40 +385,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const updatePhone = async (phone: string): Promise<UpdatePhoneResult> => {
     try {
-      console.log('Updating phone number:', phone);
-      console.log('Using token:', token ? 'Present' : 'Missing');
+      console.log('Updating phone number');
       
       if (!token) {
         return { success: false, error: 'Not authenticated. Please login again.' };
       }
+
+      // Phone validation
+      const phoneValidation = InputValidator.validatePhone(phone);
+      if (!phoneValidation.isValid) {
+        return { success: false, error: phoneValidation.error };
+      }
       
-      const response = await fetch(createApiUrl('auth/phone'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+      const response = await fetchWithTimeout(
+        createApiUrl('auth/phone'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ phone: phoneValidation.sanitizedValue }),
         },
-        body: JSON.stringify({ phone }),
-      });
+        API_REQUEST_TIMEOUT
+      );
 
       const data = await response.json();
-      console.log('Phone update response:', response.status, data);
+      console.log('Phone update response received');
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expired, logout user
-          await logout();
+          await clearAuth();
           return { success: false, error: 'Session expired. Please login again.' };
         }
-        throw new Error(data.detail || data.message || 'Failed to update phone number');
+        const errorMessage = data.detail || data.message || 'Failed to update phone number';
+        return { success: false, error: errorMessage };
       }
 
       // Update user data
-      const updatedUser = data.user || { ...user, phone };
+      const updatedUser = data.user || { ...user, phone: phoneValidation.sanitizedValue };
       setUser(updatedUser);
       
       // Update stored user data
-      await AsyncStorage.setItem('user_data', JSON.stringify(updatedUser));
+      await secureStorage.storeAuthData(token, refreshTokenValue, updatedUser);
       
       return { success: true, user: updatedUser };
     } catch (error) {
@@ -360,43 +437,164 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const sendVerificationCode = async (phone: string): Promise<VerificationResult> => {
+    try {
+      console.log('Sending verification code');
+      
+      const phoneValidation = InputValidator.validatePhone(phone);
+      if (!phoneValidation.isValid) {
+        return { success: false, error: phoneValidation.error };
+      }
+      
+      const response = await fetchWithTimeout(
+        createApiUrl('auth/send-verification'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({ phone: phoneValidation.sanitizedValue }),
+        },
+        API_REQUEST_TIMEOUT
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        const errorMessage = data.detail || data.message || 'Failed to send verification code';
+        return { success: false, error: errorMessage };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Send verification code error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const verifyPhone = async (phone: string, code: string): Promise<VerificationResult> => {
+    try {
+      console.log('Verifying phone number');
+      
+      const phoneValidation = InputValidator.validatePhone(phone);
+      if (!phoneValidation.isValid) {
+        return { success: false, error: phoneValidation.error };
+      }
+
+      if (!code || code.length !== 6) {
+        return { success: false, error: 'Please enter a valid 6-digit code' };
+      }
+      
+      const response = await fetchWithTimeout(
+        createApiUrl('auth/verify-phone'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({ 
+            phone: phoneValidation.sanitizedValue, 
+            code: code.trim() 
+          }),
+        },
+        API_REQUEST_TIMEOUT
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        const errorMessage = data.detail || data.message || 'Invalid verification code';
+        return { success: false, error: errorMessage };
+      }
+
+      // Update user data with verified phone
+      if (data.user) {
+        setUser(data.user);
+        await secureStorage.storeAuthData(token, refreshTokenValue, data.user);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Verify phone error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
+      return { success: false, error: errorMessage };
+    }
+  };
+
   const logout = async (): Promise<void> => {
     try {
       console.log('Logging out...');
-      setToken(null);
-      setUser(null);
-      setRefreshTokenState(null);
-      await Promise.all([
-        AsyncStorage.removeItem('access_token'),
-        AsyncStorage.removeItem('user_data'),
-        AsyncStorage.removeItem('refresh_token'),
-      ]);
+      
+      // Call logout endpoint if token exists
+      if (token) {
+        try {
+          await fetchWithTimeout(
+            createApiUrl('auth/logout'),
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            },
+            5000
+          );
+        } catch (error) {
+          console.warn('Logout endpoint error (ignoring):', error);
+        }
+      }
+      
+      await clearAuth();
       console.log('Logout completed');
     } catch (error) {
       console.error('Error during logout:', error);
+      await clearAuth();
     }
   };
 
   const updateProfile = async (updatedData: UpdateProfileData): Promise<UpdateProfileResult> => {
     try {
-      console.log(JSON.stringify(updatedData))
-      const response = await fetch(API_ENDPOINTS.PROFILE, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+      if (!token) {
+        return { success: false, error: 'Not authenticated. Please login again.' };
+      }
+
+      // Validate name if provided
+      if (updatedData.name) {
+        const nameValidation = InputValidator.validateName(updatedData.name);
+        if (!nameValidation.isValid) {
+          return { success: false, error: nameValidation.error };
+        }
+        updatedData.name = nameValidation.sanitizedValue;
+      }
+
+      const response = await fetchWithTimeout(
+        API_ENDPOINTS.PROFILE,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(updatedData),
         },
-        body: JSON.stringify(updatedData),
-      });
+        API_REQUEST_TIMEOUT
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || data.message || 'Profile update failed');
+        if (response.status === 401) {
+          await clearAuth();
+          return { success: false, error: 'Session expired. Please login again.' };
+        }
+        const errorMessage = data.detail || data.message || 'Profile update failed';
+        return { success: false, error: errorMessage };
       }
 
       setUser(data.user);
-      await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+      await secureStorage.storeAuthData(token, refreshTokenValue, data.user);
 
       return { success: true, user: data.user };
     } catch (error) {
@@ -407,22 +605,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const handleTokenRefresh = async (): Promise<boolean> => {
     try {
-      if (!refreshToken) {
+      if (!refreshTokenValue) {
         console.log('No refresh token available');
+        await clearAuth();
         return false;
       }
 
       console.log('Attempting to refresh token...');
-      const response = await fetch(API_ENDPOINTS.REFRESH_TOKEN, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithTimeout(
+        API_ENDPOINTS.REFRESH_TOKEN,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: refreshTokenValue }),
         },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
+        10000
+      );
 
       if (!response.ok) {
-        throw new Error('Token refresh failed');
+        console.log('Token refresh failed, clearing auth');
+        await clearAuth();
+        return false;
       }
 
       const data = await response.json();
@@ -430,21 +635,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Update tokens
       setToken(data.access_token);
       if (data.refresh_token) {
-        setRefreshTokenState(data.refresh_token);
+        setRefreshTokenValue(data.refresh_token);
       }
 
-      // Save new tokens
-      await Promise.all([
-        AsyncStorage.setItem('access_token', data.access_token),
-        data.refresh_token ? AsyncStorage.setItem('refresh_token', data.refresh_token) : Promise.resolve(),
-      ]);
+      // Save new tokens securely
+      await secureStorage.storeAuthData(
+        data.access_token,
+        data.refresh_token || refreshTokenValue,
+        user
+      );
 
       console.log('Token refreshed successfully');
       return true;
     } catch (error) {
       console.error('Token refresh error:', error);
-      // If refresh fails, logout the user
-      await logout();
+      await clearAuth();
       return false;
     }
   };
@@ -457,7 +662,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     googleLogin,
     register,
-    updatePhone, // Add updatePhone to context
+    updatePhone,
+    sendVerificationCode,
+    verifyPhone,
     logout,
     updateProfile,
     refreshToken: handleTokenRefresh,
