@@ -24,6 +24,7 @@
         "projectId": "37775160-3c66-48ef-988a-82efae359109"
       }
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ios.smartbag",
@@ -47,6 +48,7 @@
         }
       }
     },
+
     "android": {
       "icon": "./assets/icon.png",
       "adaptiveIcon": {

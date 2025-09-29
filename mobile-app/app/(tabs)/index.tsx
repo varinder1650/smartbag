@@ -13,6 +13,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Animated,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +22,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../../config/apiConfig';
 import { useAuth } from '../../contexts/AuthContext';
 
-import { RequestProductSection } from '../../components/RequestProductSection';
+import { RequestProductSection, RequestProductRef } from '../../components/RequestProductSection';
 
 const { width } = Dimensions.get('window');
 
@@ -113,6 +114,7 @@ const HomeScreen = () => {
   const [cartCount, setCartCount] = useState(0);
   const [showCartNotification, setShowCartNotification] = useState(false);
   const [userAddress, setUserAddress] = useState<string>('Add Address');
+  // const [showRequestModal, setShowRequestModal] = useState(false);
   
   // New state for cart quantities and loading states
   const [cartQuantities, setCartQuantities] = useState<CartQuantities>({});
@@ -122,7 +124,7 @@ const HomeScreen = () => {
   const initialDataFetched = useRef(false);
   const lastFetchTime = useRef(0);
   const isFetching = useRef(false);
-
+  const requestFormRef = useRef<RequestProductRef>(null);
   // Memoized fetch functions to prevent recreation on every render
   const fetchData = useCallback(async () => {
     // Prevent multiple simultaneous fetches
@@ -926,6 +928,18 @@ const HomeScreen = () => {
             </TouchableOpacity>
           );
         })}
+        
+        {/* Add Request Product button in the category section */}
+        <TouchableOpacity 
+          key="request-product"
+          onPress={() => requestFormRef.current?.openForm()} // CHANGED THIS LINE
+          style={{ alignItems: 'center', marginHorizontal: 8 }}
+        >
+          <View style={styles.requestProductIconContainer}>
+            <Ionicons name="add-circle-outline" size={24} color="#FF6B35" />
+          </View>
+          <Text style={styles.requestProductLabel}>Request Product</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   ), [categories, selectedCategory, getCategoryIconUrl, handleCategoryPress]);
@@ -1049,6 +1063,7 @@ const HomeScreen = () => {
   // New function to render the request product section with proper callback
   const handleRequestSubmitted = useCallback(() => {
     Alert.alert('Thank you!', 'Your product request has been submitted.');
+    // setShowRequestModal(false);
   }, []);
 
   if (loading) {
@@ -1056,10 +1071,6 @@ const HomeScreen = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <AnimatedLogo />
-          {/* <Text style={styles.loadingText}>Loading amazing products...</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity> */}
         </View>
       </SafeAreaView>
     );
@@ -1086,10 +1097,15 @@ const HomeScreen = () => {
               <Text style={{ color: '#888', fontSize: 16 }}>No products found.</Text>
             </View>
           }
-          // Add RequestProductSection to the footer of grid view as well
+
           ListFooterComponent={() => (
             <View>
-              <RequestProductSection onRequestSubmitted={handleRequestSubmitted} />
+              <View style={styles.borderlessRequestSection}>
+                <RequestProductSection 
+                  ref={requestFormRef}
+                  onRequestSubmitted={handleRequestSubmitted} 
+                />
+              </View>
               <View style={{ height: 100 }} />
             </View>
           )}
@@ -1108,8 +1124,8 @@ const HomeScreen = () => {
           maxToRenderPerBatch={8}
           windowSize={10}
           getItemLayout={(data, index) => ({
-            length: 240, // Increased height to account for cart button
-            offset: 240 * Math.floor(index / 2), // Account for 2 columns
+            length: 240,
+            offset: 240 * Math.floor(index / 2),
             index,
           })}
         />
@@ -1119,9 +1135,15 @@ const HomeScreen = () => {
           data={categories}
           renderItem={renderCategorySection}
           keyExtractor={(item, index) => `category-section-${item._id}-${index}`}
+
           ListFooterComponent={() => (
             <View>
-              <RequestProductSection onRequestSubmitted={handleRequestSubmitted} />
+              <View style={styles.borderlessRequestSection}>
+                <RequestProductSection 
+                  ref={requestFormRef}
+                  onRequestSubmitted={handleRequestSubmitted} 
+                />
+              </View>
               <View style={{ height: 100 }} />
             </View>
           )}
@@ -1302,6 +1324,25 @@ const styles = StyleSheet.create({
   categoryUberLabelSelected: {
     color: '#007AFF',
     fontWeight: 'bold',
+  },
+  // New styles for request product button in categories
+  requestProductIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFF0E6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FF6B35',
+    borderStyle: 'dashed',
+  },
+  requestProductLabel: {
+    fontSize: 12,
+    color: '#FF6B35',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   productTile: {
     flex: 1,
@@ -1545,6 +1586,38 @@ const styles = StyleSheet.create({
   dimmedPrice: {
     opacity: 0.6,
     color: '#999',
+  },
+  // New styles for borderless request section
+  borderlessRequestSection: {
+    marginHorizontal: 16,
+    marginTop: 20,
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
 });
 
