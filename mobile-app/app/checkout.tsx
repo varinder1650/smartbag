@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   TextInput,
+  Modal,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,7 +72,11 @@ export default function CheckoutScreen() {
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
 
-  // Load initial data
+  // Success animation states
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [scaleAnim] = useState(new Animated.Value(0));
+  const [fadeAnim] = useState(new Animated.Value(0));
+
   useEffect(() => {
     if (token) {
       loadData();
@@ -79,7 +85,6 @@ export default function CheckoutScreen() {
 
   const loadData = async () => {
     try {
-      // Fetch cart items
       const cartResponse = await fetch(API_ENDPOINTS.CART, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -89,14 +94,12 @@ export default function CheckoutScreen() {
         setCartItems(cartData.items || []);
       }
       
-      // Fetch settings
       const settingsResponse = await fetch(API_ENDPOINTS.SETTINGS);
       if (settingsResponse.ok) {
         const settingsData = await settingsResponse.json();
         setSettings(settingsData);
       }
       
-      // Auto-load default address if not coming from address selection
       if (!params.address) {
         await loadDefaultAddress();
       }
@@ -108,7 +111,6 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Function to load default address
   const loadDefaultAddress = async () => {
     try {
       const addressResponse = await fetch(`${API_BASE_URL}address/my`, {
@@ -120,7 +122,6 @@ export default function CheckoutScreen() {
       
       if (addressResponse.ok) {
         const addressData = await addressResponse.json();
-        // console.log('Address data received:', addressData);
         
         let addresses = [];
         if (Array.isArray(addressData)) {
@@ -131,9 +132,8 @@ export default function CheckoutScreen() {
           addresses = [addressData.address];
         }
         
-        // Find default address or use first one
         const defaultAddress = addresses.find(addr => addr.is_default) || addresses[0];
-        // console.log(defaultAddress)
+        
         if (defaultAddress) {
           const addressParts = [];
           if (defaultAddress.address) addressParts.push(defaultAddress.address);
@@ -158,7 +158,6 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Handle address parameters from address selection
   useEffect(() => {
     const addressFromParams = params.address as string;
     const fullAddressFromParams = params.fullAddress as string;
@@ -180,10 +179,8 @@ export default function CheckoutScreen() {
     }
   }, [params.address, params.fullAddress, params.city, params.state, params.pincode, params.latitude, params.longitude]);
 
-  // Function to update cart item quantity
   const updateCartQuantity = async (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
-      // Remove item from cart
       Alert.alert(
         'Remove Item',
         'Are you sure you want to remove this item from your cart?',
@@ -199,7 +196,6 @@ export default function CheckoutScreen() {
       return;
     }
 
-    // Check stock availability
     const cartItem = cartItems.find(item => item._id === itemId);
     if (cartItem && newQuantity > cartItem.product.stock) {
       Alert.alert('Stock Limit', `Only ${cartItem.product.stock} items available in stock`);
@@ -219,7 +215,6 @@ export default function CheckoutScreen() {
       });
 
       if (response.ok) {
-        // Update local state
         setCartItems(prevItems =>
           prevItems.map(item =>
             item._id === itemId ? { ...item, quantity: newQuantity } : item
@@ -250,7 +245,6 @@ export default function CheckoutScreen() {
       });
 
       if (response.ok) {
-        // Remove from local state
         setCartItems(prevItems => prevItems.filter(item => item._id !== itemId));
       } else {
         const errorData = await response.json();
@@ -264,7 +258,6 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Promo code functions
   const applyPromoCode = async () => {
     if (!promoCode.trim()) {
       Alert.alert('Error', 'Please enter a promo code');
@@ -328,6 +321,48 @@ export default function CheckoutScreen() {
     setPromoDiscount(discount);
   };
 
+  const showSuccessAnimation = () => {
+    setShowSuccess(true);
+    
+    // Reset animations to start from center (scale 0)
+    scaleAnim.setValue(0);
+    fadeAnim.setValue(0);
+    
+    // Animate checkmark - grow from center
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 40,
+        friction: 5,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Hide after 2.5 seconds and navigate
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setShowSuccess(false);
+        router.push('/(tabs)');
+      });
+    }, 2500);
+  };
+
   const getSubtotal = () => {
     return cartItems.reduce((total, item) => total + (item.product.price * item.quantity), 0);
   };
@@ -342,12 +377,10 @@ export default function CheckoutScreen() {
     if (!settings || !settings.delivery_fee) return 0;
     const subtotal = getSubtotal();
     
-    // Check if eligible for free delivery
     if (subtotal >= settings.delivery_fee.free_delivery_threshold) {
       return 0;
     }
     
-    // Return base fee for fixed type
     if (settings.delivery_fee.type === 'fixed') {
       return settings.delivery_fee.base_fee;
     }
@@ -390,7 +423,6 @@ export default function CheckoutScreen() {
       return;
     }
 
-    // Simple validation
     if (!deliveryAddress.address || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.pincode) {
       Alert.alert('Error', 'Please provide complete address information');
       return;
@@ -436,11 +468,7 @@ export default function CheckoutScreen() {
       });
 
       if (response.ok) {
-        Alert.alert(
-          'Order Placed Successfully!',
-          'Your order has been placed and will be delivered soon.',
-          [{ text: 'OK', onPress: () => router.push('/(tabs)') }]
-        );
+        showSuccessAnimation();
       } else {
         const errorData = await response.json();
         Alert.alert('Error', errorData.detail || 'Failed to place order');
@@ -486,7 +514,6 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -496,7 +523,6 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="location-outline" size={24} color="#007AFF" />
@@ -533,7 +559,6 @@ export default function CheckoutScreen() {
           )}
         </View>
 
-        {/* Order Summary with Quantity Controls */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="list-outline" size={24} color="#007AFF" />
@@ -547,7 +572,6 @@ export default function CheckoutScreen() {
                 <Text style={styles.orderItemBrand}>{item.product.brand?.name}</Text>
                 <Text style={styles.orderItemPrice}>₹{item.product.price} each</Text>
                 
-                {/* Quantity Controls */}
                 <View style={styles.quantityControls}>
                   <TouchableOpacity
                     style={[styles.quantityButton, updatingQuantity[item._id] && styles.disabledQuantityButton]}
@@ -588,7 +612,6 @@ export default function CheckoutScreen() {
           ))}
         </View>
 
-        {/* Promo Code Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="pricetag-outline" size={24} color="#007AFF" />
@@ -635,7 +658,6 @@ export default function CheckoutScreen() {
           )}
         </View>
 
-        {/* Price Breakdown */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="calculator-outline" size={24} color="#007AFF" />
@@ -682,7 +704,6 @@ export default function CheckoutScreen() {
           </View>
         </View>
 
-        {/* Payment Method */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="card-outline" size={24} color="#007AFF" />
@@ -718,6 +739,31 @@ export default function CheckoutScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Success Animation Modal */}
+      <Modal
+        visible={showSuccess}
+        transparent={true}
+        animationType="none"
+      >
+        <View style={styles.successOverlay}>
+          <Animated.View 
+            style={[
+              styles.successContainer,
+              {
+                transform: [{ scale: scaleAnim }],
+                opacity: fadeAnim,
+              }
+            ]}
+          >
+            <View style={styles.successCircle}>
+              <Ionicons name="checkmark" size={80} color="#fff" />
+            </View>
+            <Text style={styles.successText}>Order Placed Successfully!</Text>
+            <Text style={styles.successSubtext}>Your order will be delivered soon</Text>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1082,5 +1128,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 2,
+  },
+  successOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  successCircle: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: '#34C759',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  successText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 24,
+    textAlign: 'center',
+  },
+  successSubtext: {
+    fontSize: 16,
+    color: '#fff',
+    marginTop: 8,
+    textAlign: 'center',
+    opacity: 0.9,
   },
 });

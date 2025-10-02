@@ -8,6 +8,9 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Modal,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,20 +18,19 @@ import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL, IMAGE_BASE_URL, API_ENDPOINTS } from '../config/apiConfig';
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 interface OrderItem {
-  product: {
-    _id: string;
-    product_name: string;
-    price: number;
-    // images: string[];
-    // brand: { name: string };
-  };
+  product: string;
+  product_name: string;
+  product_image: Array<{url: string; thumbnail: string}>;
   quantity: number;
   price: number;
 }
 
 interface Order {
   _id?: string;
+  id?: string;
   items?: OrderItem[];
   delivery_address?: {
     address: string;
@@ -47,15 +49,35 @@ interface Order {
   created_at?: string;
 }
 
+interface ProductRequest {
+  _id: string;
+  product_name: string;
+  brand?: string;
+  category?: string;
+  description: string;
+  status: string;
+  votes: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function OrdersScreen() {
   const { token } = useAuth();
+  const [activeTab, setActiveTab] = useState<'orders' | 'requests'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [productRequests, setProductRequests] = useState<ProductRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (activeTab === 'orders') {
+      fetchOrders();
+    } else {
+      fetchProductRequests();
+    }
+  }, [activeTab]);
 
   const fetchOrders = async () => {
     if (!token) return;
@@ -69,15 +91,8 @@ export default function OrdersScreen() {
       
       if (response.ok) {
         const data = await response.json();
-        setOrders(data || []);
-        
-        // Better logging to see the actual data structure
-        console.log('Orders count:', data.length);
-        if (data.length > 0) {
-          console.log('First order ID:', data[0]._id);
-          console.log('First order items:', JSON.stringify(data[0].items, null, 2));
-          console.log('Product name in first item:', data[0].items[0]?.product_name);
-        }
+        const ordersArray = data.orders || [];
+        setOrders(ordersArray);
       } else {
         console.error('Failed to fetch orders');
       }
@@ -89,10 +104,49 @@ export default function OrdersScreen() {
     }
   };
 
+  const fetchProductRequests = async () => {
+    if (!token) return;
+    
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}support/product-requests`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setProductRequests(data || []);
+      } else {
+        console.error('Failed to fetch product requests');
+      }
+    } catch (error) {
+      console.error('Error fetching product requests:', error);
+      Alert.alert('Error', 'Failed to load product requests');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchOrders();
+    if (activeTab === 'orders') {
+      await fetchOrders();
+    } else {
+      await fetchProductRequests();
+    }
     setRefreshing(false);
+  };
+
+  const openOrderDetails = (order: Order) => {
+    setSelectedOrder(order);
+    setModalVisible(true);
+  };
+
+  const closeOrderDetails = () => {
+    setModalVisible(false);
+    setSelectedOrder(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -133,6 +187,23 @@ export default function OrdersScreen() {
     }
   };
 
+  const getRequestStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return '#FF9500';
+      case 'under_review':
+        return '#007AFF';
+      case 'approved':
+        return '#34C759';
+      case 'rejected':
+        return '#FF3B30';
+      case 'added':
+        return '#5856D6';
+      default:
+        return '#8E8E93';
+    }
+  };
+
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -148,33 +219,36 @@ export default function OrdersScreen() {
     }
   };
 
-  const renderOrder = ({ item }: { item: Order }) => {
+  const renderOrderCard = ({ item }: { item: Order }) => {
+    const orderId = item._id || item.id || 'N/A';
+    const itemCount = item.items?.length || 0;
+    
     return (
-      <View style={styles.orderCard}>
+      <TouchableOpacity 
+        style={styles.orderCard}
+        onPress={() => openOrderDetails(item)}
+        activeOpacity={0.7}
+      >
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order #{item._id ? item._id.slice(-8).toUpperCase() : 'N/A'}</Text>
-            <Text style={styles.orderDate}>{item.created_at ? formatDate(item.created_at) : 'Date not available'}</Text>
+            <Text style={styles.orderId}>
+              Order #{orderId.toUpperCase()}
+            </Text>
+            <Text style={styles.orderDate}>
+              {item.created_at ? formatDate(item.created_at) : 'Date not available'}
+            </Text>
+            <Text style={styles.itemCount}>{itemCount} item{itemCount !== 1 ? 's' : ''}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.order_status || 'pending') }]}>
-            <Text style={styles.statusText}>{getStatusText(item.order_status || 'pending')}</Text>
+          <View style={[
+            styles.statusBadge, 
+            { backgroundColor: getStatusColor(item.order_status || 'pending') }
+          ]}>
+            <Text style={styles.statusText}>
+              {getStatusText(item.order_status || 'pending')}
+            </Text>
           </View>
         </View>
 
-         <View style={styles.orderItems}>
-          {(item.items || []).map((orderItem, index) => (
-            <View key={index} style={styles.orderItemRow}>
-              <View style={styles.orderItemInfo}>
-                <Text style={styles.orderItemName} numberOfLines={2}>
-                  {orderItem.product_name || 'Product not available'}
-                </Text>
-                <Text style={styles.orderItemQuantity}>Qty: {orderItem.quantity || 0}</Text>
-              </View>
-              <Text style={styles.orderItemPrice}>₹{(orderItem.price || 0).toFixed(2)}</Text>
-            </View>
-          ))}
-        </View>
-      
         <View style={styles.orderFooter}>
           <View style={styles.deliveryInfo}>
             <Ionicons name="location-outline" size={16} color="#666" />
@@ -186,14 +260,166 @@ export default function OrdersScreen() {
             </Text>
           </View>
           
-          <View style={styles.paymentInfo}>
-            <Text style={styles.paymentMethod}>
-              {(item.payment_method || 'cod') === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
-            </Text>
+          <View style={styles.orderSummary}>
             <Text style={styles.totalAmount}>₹{(item.total_amount || 0).toFixed(2)}</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
           </View>
         </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderProductRequest = ({ item }: { item: ProductRequest }) => {
+    return (
+      <View style={styles.requestCard}>
+        <View style={styles.requestHeader}>
+          <Text style={styles.requestName}>{item.product_name}</Text>
+          <View style={[
+            styles.requestStatusBadge,
+            { backgroundColor: getRequestStatusColor(item.status) }
+          ]}>
+            <Text style={styles.requestStatusText}>
+              {item.status.replace('_', ' ').toUpperCase()}
+            </Text>
+          </View>
+        </View>
+        
+        {item.brand && (
+          <Text style={styles.requestBrand}>Brand: {item.brand}</Text>
+        )}
+        {item.category && (
+          <Text style={styles.requestCategory}>Category: {item.category}</Text>
+        )}
+        
+        <Text style={styles.requestDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
+        
+        {/* <View style={styles.requestFooter}>
+          <View style={styles.requestVotes}>
+            <Ionicons name="thumbs-up-outline" size={16} color="#007AFF" />
+            <Text style={styles.votesText}>{item.votes} votes</Text>
+          </View>
+          <Text style={styles.requestDate}>{formatDate(item.created_at)}</Text>
+        </View> */}
       </View>
+    );
+  };
+
+  const OrderDetailsModal = () => {
+    if (!selectedOrder) return null;
+    
+    const orderId = selectedOrder._id || selectedOrder.id || 'N/A';
+    
+    return (
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeOrderDetails}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Order Details</Text>
+            <TouchableOpacity onPress={closeOrderDetails} style={styles.closeButton}>
+              <Ionicons name="close" size={28} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.detailSection}>
+              <Text style={styles.sectionTitle}>Order Information</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Order ID:</Text>
+                <Text style={styles.detailValue}>#{orderId.toUpperCase()}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Date:</Text>
+                <Text style={styles.detailValue}>
+                  {selectedOrder.created_at ? formatDate(selectedOrder.created_at) : 'N/A'}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Status:</Text>
+                <View style={[
+                  styles.inlineStatusBadge,
+                  { backgroundColor: getStatusColor(selectedOrder.order_status || 'pending') }
+                ]}>
+                  <Text style={styles.inlineStatusText}>
+                    {getStatusText(selectedOrder.order_status || 'pending')}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.detailSection}>
+              <Text style={styles.sectionTitle}>Items Ordered</Text>
+              {(selectedOrder.items || []).map((orderItem, index) => (
+                <View key={index} style={styles.detailItemRow}>
+                  <View style={styles.detailItemInfo}>
+                    <Text style={styles.detailItemName}>
+                      {orderItem.product_name || 'Product not available'}
+                    </Text>
+                    <Text style={styles.detailItemQuantity}>Quantity: {orderItem.quantity}</Text>
+                  </View>
+                  <Text style={styles.detailItemPrice}>
+                    ₹{(orderItem.price * orderItem.quantity).toFixed(2)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.detailSection}>
+              <Text style={styles.sectionTitle}>Delivery Address</Text>
+              <Text style={styles.addressText}>
+                {selectedOrder.delivery_address?.address}
+              </Text>
+              <Text style={styles.addressText}>
+                {selectedOrder.delivery_address?.city}, {selectedOrder.delivery_address?.state}
+              </Text>
+              <Text style={styles.addressText}>
+                PIN: {selectedOrder.delivery_address?.pincode}
+              </Text>
+            </View>
+
+            <View style={styles.detailSection}>
+              <Text style={styles.sectionTitle}>Payment Summary</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal:</Text>
+                <Text style={styles.summaryValue}>₹{(selectedOrder.subtotal || 0).toFixed(2)}</Text>
+              </View>
+              {(selectedOrder.tax || 0) > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Tax:</Text>
+                  <Text style={styles.summaryValue}>₹{(selectedOrder.tax || 0).toFixed(2)}</Text>
+                </View>
+              )}
+              {(selectedOrder.delivery_charge || 0) > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Delivery Charge:</Text>
+                  <Text style={styles.summaryValue}>₹{(selectedOrder.delivery_charge || 0).toFixed(2)}</Text>
+                </View>
+              )}
+              {(selectedOrder.app_fee || 0) > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Platform Fee:</Text>
+                  <Text style={styles.summaryValue}>₹{(selectedOrder.app_fee || 0).toFixed(2)}</Text>
+                </View>
+              )}
+              <View style={[styles.summaryRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Total:</Text>
+                <Text style={styles.totalValue}>₹{(selectedOrder.total_amount || 0).toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Payment Method:</Text>
+                <Text style={styles.summaryValue}>
+                  {(selectedOrder.payment_method || 'cod') === 'cod' ? 'Cash on Delivery' : 'Online Payment'}
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     );
   };
 
@@ -202,7 +428,7 @@ export default function OrdersScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading orders...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -210,7 +436,6 @@ export default function OrdersScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -219,38 +444,88 @@ export default function OrdersScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {orders.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="receipt-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyTitle}>No orders yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Your order history will appear here
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'orders' && styles.activeTab]}
+          onPress={() => setActiveTab('orders')}
+        >
+          <Text style={[styles.tabText, activeTab === 'orders' && styles.activeTabText]}>
+            Orders
           </Text>
-          <TouchableOpacity 
-            style={styles.shopNowButton}
-            onPress={() => router.push('/(tabs)')}
-          >
-            <Text style={styles.shopNowText}>Start Shopping</Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
+          onPress={() => setActiveTab('requests')}
+        >
+          <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+            Requested Products
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'orders' ? (
+        orders.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="receipt-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyTitle}>No orders yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Your order history will appear here
+            </Text>
+            <TouchableOpacity 
+              style={styles.shopNowButton}
+              onPress={() => router.push('/(tabs)')}
+            >
+              <Text style={styles.shopNowText}>Start Shopping</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={orders}
+            renderItem={renderOrderCard}
+            keyExtractor={(item) => item._id || item.id || `order-${Math.random()}`}
+            style={styles.ordersList}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#007AFF']}
+                tintColor="#007AFF"
+              />
+            }
+            contentContainerStyle={styles.ordersListContent}
+          />
+        )
       ) : (
-        <FlatList
-          data={orders}
-          renderItem={renderOrder}
-          keyExtractor={(item) => item._id || `order-${Math.random()}`}
-          style={styles.ordersList}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#007AFF']}
-              tintColor="#007AFF"
-            />
-          }
-          contentContainerStyle={styles.ordersListContent}
-        />
+        productRequests.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="cube-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyTitle}>No product requests</Text>
+            <Text style={styles.emptySubtitle}>
+              Request products you'd like to see in our store
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={productRequests}
+            renderItem={renderProductRequest}
+            keyExtractor={(item) => item._id}
+            style={styles.ordersList}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#007AFF']}
+                tintColor="#007AFF"
+              />
+            }
+            contentContainerStyle={styles.ordersListContent}
+          />
+        )
       )}
+
+      <OrderDetailsModal />
     </SafeAreaView>
   );
 }
@@ -280,6 +555,31 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#007AFF',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -357,6 +657,11 @@ const styles = StyleSheet.create({
   orderDate: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 4,
+  },
+  itemCount: {
+    fontSize: 13,
+    color: '#999',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -368,50 +673,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  orderItems: {
-    padding: 16,
-  },
-  orderItemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f8f8f8',
-  },
-  orderItemInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  orderItemName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  orderItemBrand: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 2,
-  },
-  orderItemQuantity: {
-    fontSize: 12,
-    color: '#888',
-  },
-  orderItemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
   orderFooter: {
     padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
   deliveryInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   deliveryAddress: {
     fontSize: 14,
@@ -419,18 +687,210 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  paymentInfo: {
+  orderSummary: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  paymentMethod: {
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  detailSection: {
+    backgroundColor: '#fff',
+    padding: 16,
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  detailLabel: {
     fontSize: 14,
     color: '#666',
   },
-  totalAmount: {
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  inlineStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  inlineStatusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  detailItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f8f8',
+  },
+  detailItemInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  detailItemName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 4,
+  },
+  detailItemQuantity: {
+    fontSize: 13,
+    color: '#666',
+  },
+  detailItemPrice: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  addressText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#333',
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    marginTop: 8,
+    paddingTop: 12,
+  },
+  totalLabel: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  totalValue: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#007AFF',
+  },
+  requestCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  requestHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  requestName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+    marginRight: 8,
+  },
+  requestStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  requestStatusText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  requestBrand: {
+    fontSize: 13,
+    color: '#007AFF',
+    marginBottom: 4,
+  },
+  requestCategory: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 8,
+  },
+  requestDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  requestFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 12,
+  },
+  requestVotes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  votesText: {
+    fontSize: 13,
+    color: '#007AFF',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  requestDate: {
+    fontSize: 12,
+    color: '#999',
   },
 });

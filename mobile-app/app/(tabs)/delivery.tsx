@@ -9,6 +9,7 @@ import {
   Modal,
   FlatList,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,6 +22,7 @@ interface Order {
   order_status: string;
   total_amount: number;
   created_at: string;
+  payment_method: string;
   user_info?: {
     name: string;
     phone: string;
@@ -32,7 +34,13 @@ interface Order {
     state: string;
     pincode: string;
   };
-  items?: any[];
+  items?: Array<{
+    product: string;
+    product_name: string;
+    product_image: any[];
+    quantity: number;
+    price: number;
+  }>;
 }
 
 type TabType = 'available' | 'assigned' | 'delivered';
@@ -45,7 +53,6 @@ export default function DeliveryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [currentTab, setCurrentTab] = useState<TabType>('available');
   
-  // Separate state for each tab
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [assignedOrders, setAssignedOrders] = useState<Order[]>([]);
   const [deliveredOrders, setDeliveredOrders] = useState<Order[]>([]);
@@ -150,7 +157,6 @@ export default function DeliveryScreen() {
     console.log('Fetching delivery orders...');
     
     try {
-      // Fetch all three types of orders in parallel
       const [available, assigned, delivered] = await Promise.all([
         fetchAvailableOrders(),
         fetchAssignedOrders(),
@@ -225,7 +231,6 @@ export default function DeliveryScreen() {
               
               Alert.alert('Success', 'Order accepted!');
               
-              // Refresh orders to update the lists
               await fetchOrders();
               setCurrentTab('assigned');
               
@@ -272,7 +277,6 @@ export default function DeliveryScreen() {
               
               Alert.alert('Success', 'Order marked as delivered!');
               
-              // Refresh orders to update the lists
               await fetchOrders();
               setIsModalVisible(false);
               setCurrentTab('delivered');
@@ -332,11 +336,12 @@ export default function DeliveryScreen() {
   const renderOrder = ({ item }: { item: Order }) => (
     <TouchableOpacity
       style={styles.orderCard}
-      onPress={() => openOrderDetails(item)}
+      onPress={() => currentTab === 'assigned' ? openOrderDetails(item) : undefined}
+      activeOpacity={currentTab === 'assigned' ? 0.7 : 1}
     >
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderId}>Order #{item._id.slice(-8).toUpperCase()}</Text>
+          <Text style={styles.orderId}>Order #{item._id.toUpperCase()}</Text>
           <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.order_status) }]}>
@@ -344,20 +349,39 @@ export default function DeliveryScreen() {
         </View>
       </View>
 
-      <View style={styles.orderDetails}>
-        <Text style={styles.customerName}>
-          Customer: {item.user_info?.name || 'N/A'}
-        </Text>
-        <Text style={styles.deliveryAddress} numberOfLines={2}>
-          Address: {item.delivery_address ? 
-            `${item.delivery_address.address}, ${item.delivery_address.city}` : 
-            'Address not available'
-          }
-        </Text>
-        <Text style={styles.orderAmount}>
-          Amount: ₹{item.total_amount || 0}
-        </Text>
-      </View>
+      {currentTab === 'assigned' && (
+        <View style={styles.assignedOrderDetails}>
+          <View style={styles.customerSection}>
+            <Ionicons name="person-outline" size={16} color="#666" />
+            <Text style={styles.customerName}>{item.user_info?.name || 'N/A'}</Text>
+          </View>
+          
+          <View style={styles.addressSection}>
+            <Ionicons name="location-outline" size={16} color="#666" />
+            <Text style={styles.deliveryAddress} numberOfLines={2}>
+              {item.delivery_address ? 
+                `${item.delivery_address.address}, ${item.delivery_address.city}, ${item.delivery_address.state} - ${item.delivery_address.pincode}` : 
+                'Address not available'
+              }
+            </Text>
+          </View>
+
+          <View style={styles.itemsPreview}>
+            <Ionicons name="cube-outline" size={16} color="#666" />
+            <Text style={styles.itemsCount}>
+              {item.items?.length || 0} item{(item.items?.length || 0) !== 1 ? 's' : ''}
+            </Text>
+          </View>
+
+          {item.payment_method === 'cod' && (
+            <View style={styles.amountSection}>
+              <Ionicons name="cash-outline" size={16} color="#34C759" />
+              <Text style={styles.codLabel}>Cash on Delivery</Text>
+              <Text style={styles.orderAmount}>₹{(item.total_amount || 0).toFixed(2)}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {currentTab === 'available' && (
         <TouchableOpacity
@@ -441,7 +465,6 @@ export default function DeliveryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
             style={styles.backButton}
@@ -459,7 +482,6 @@ export default function DeliveryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Tab Navigation */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, currentTab === 'available' && styles.activeTab]}
@@ -519,10 +541,8 @@ export default function DeliveryScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Tab Content */}
       {renderTabContent()}
 
-      {/* Order Details Modal */}
       {selectedOrder && (
         <Modal
           animationType="slide"
@@ -539,74 +559,83 @@ export default function DeliveryScreen() {
               <View style={styles.placeholder} />
             </View>
 
-            <View style={styles.modalContent}>
+            <ScrollView style={styles.modalContentScroll}>
               <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Order ID</Text>
-                <Text style={styles.detailValue}>#{selectedOrder._id.slice(-8).toUpperCase()}</Text>
-              </View>
-
-              <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Status</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedOrder.order_status) }]}>
-                  <Text style={styles.statusText}>{selectedOrder.order_status}</Text>
+                <Text style={styles.sectionTitle}>Order Information</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Order ID:</Text>
+                  <Text style={styles.detailValue}>#{selectedOrder._id.toUpperCase()}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Status:</Text>
+                  <View style={[
+                    styles.inlineStatusBadge,
+                    { backgroundColor: getStatusColor(selectedOrder.order_status) }
+                  ]}>
+                    <Text style={styles.inlineStatusText}>{selectedOrder.order_status}</Text>
+                  </View>
                 </View>
               </View>
 
               <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Customer Details</Text>
-                <Text style={styles.detailValue}>
-                  Name: {selectedOrder.user_info?.name || 'N/A'}
+                <Text style={styles.sectionTitle}>Customer Details</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Name:</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.user_info?.name || 'N/A'}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Phone:</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.user_info?.phone || 'N/A'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Text style={styles.sectionTitle}>Delivery Address</Text>
+                <Text style={styles.addressText}>
+                  {selectedOrder.delivery_address?.address}
                 </Text>
-                <Text style={styles.detailValue}>
-                  Phone: {selectedOrder.user_info?.phone || 'N/A'}
+                <Text style={styles.addressText}>
+                  {selectedOrder.delivery_address?.city}, {selectedOrder.delivery_address?.state}
+                </Text>
+                <Text style={styles.addressText}>
+                  PIN: {selectedOrder.delivery_address?.pincode}
                 </Text>
               </View>
 
               <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Delivery Address</Text>
-                <Text style={styles.detailValue}>
-                  {selectedOrder.delivery_address ? 
-                    `${selectedOrder.delivery_address.address}, ${selectedOrder.delivery_address.city}, ${selectedOrder.delivery_address.state}, ${selectedOrder.delivery_address.pincode}` : 
-                    'Address not available'
-                  }
-                </Text>
+                <Text style={styles.sectionTitle}>Order Items</Text>
+                {(selectedOrder.items || []).map((orderItem, index) => (
+                  <View key={index} style={styles.orderItemRow}>
+                    <View style={styles.orderItemInfo}>
+                      <Text style={styles.orderItemName}>
+                        {orderItem.product_name || 'Product not available'}
+                      </Text>
+                      <Text style={styles.orderItemQuantity}>Qty: {orderItem.quantity || 0}</Text>
+                    </View>
+                  </View>
+                ))}
               </View>
 
-              <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Order Amount</Text>
-                <Text style={styles.detailValue}>₹{selectedOrder.total_amount || 0}</Text>
-              </View>
+              {selectedOrder.payment_method === 'cod' && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.sectionTitle}>Cash on Delivery</Text>
+                  <Text style={styles.codAmount}>₹{(selectedOrder.total_amount || 0).toFixed(2)}</Text>
+                  <Text style={styles.codNote}>Collect this amount from customer</Text>
+                </View>
+              )}
 
-              {/* Action Buttons */}
               <View style={styles.modalActions}>
-                {currentTab === 'available' && (
-                  <TouchableOpacity
-                    style={styles.modalAcceptButton}
-                    onPress={() => {
-                      setIsModalVisible(false);
-                      handleAcceptOrder(selectedOrder._id);
-                    }}
-                    disabled={actionLoading}
-                  >
-                    <Text style={styles.modalAcceptButtonText}>
-                      {actionLoading ? 'Accepting...' : 'Accept This Order'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                {currentTab === 'assigned' && (
-                  <TouchableOpacity
-                    style={styles.modalDeliveredButton}
-                    onPress={() => handleMarkAsDelivered(selectedOrder._id)}
-                    disabled={actionLoading}
-                  >
-                    <Text style={styles.modalDeliveredButtonText}>
-                      {actionLoading ? 'Updating...' : 'Mark as Delivered'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={styles.modalDeliveredButton}
+                  onPress={() => handleMarkAsDelivered(selectedOrder._id)}
+                  disabled={actionLoading}
+                >
+                  <Text style={styles.modalDeliveredButtonText}>
+                    {actionLoading ? 'Updating...' : 'Mark as Delivered'}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
           </SafeAreaView>
         </Modal>
       )}
@@ -715,7 +744,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
   },
   orderInfo: {
     flex: 1,
@@ -743,31 +771,71 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
   },
-  orderDetails: {
-    marginBottom: 12,
+  assignedOrderDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  customerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   customerName: {
     fontSize: 14,
     color: '#333',
-    marginBottom: 4,
+    marginLeft: 8,
     fontWeight: '500',
   },
+  addressSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
   deliveryAddress: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
-    marginBottom: 4,
+    marginLeft: 8,
+    flex: 1,
     lineHeight: 18,
   },
+  itemsPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  itemsCount: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 8,
+  },
+  amountSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  codLabel: {
+    fontSize: 13,
+    color: '#34C759',
+    marginLeft: 8,
+    flex: 1,
+    fontWeight: '500',
+  },
   orderAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#34C759',
   },
   acceptButton: {
     backgroundColor: '#007AFF',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 12,
   },
   acceptButtonText: {
     color: '#fff',
@@ -779,6 +847,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 12,
   },
   deliveredButtonText: {
     color: '#fff',
@@ -831,37 +900,86 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 50,
   },
-  modalContent: {
+  modalContentScroll: {
     flex: 1,
-    padding: 16,
   },
   detailSection: {
-    marginBottom: 20,
+    backgroundColor: '#fff',
+    padding: 16,
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   detailLabel: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#666',
-    marginBottom: 8,
   },
   detailValue: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '500',
     color: '#333',
-    lineHeight: 22,
+  },
+  inlineStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  inlineStatusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addressText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  orderItemRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f8f8',
+  },
+  orderItemInfo: {
+    flex: 1,
+  },
+  orderItemName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: 4,
+  },
+  orderItemQuantity: {
+    fontSize: 13,
+    color: '#666',
+  },
+  codAmount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#34C759',
+    marginTop: 8,
+  },
+  codNote: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   modalActions: {
-    marginTop: 20,
-  },
-  modalAcceptButton: {
-    backgroundColor: '#007AFF',
     padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalAcceptButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    marginBottom: 20,
   },
   modalDeliveredButton: {
     backgroundColor: '#34C759',
