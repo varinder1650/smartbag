@@ -10,3 +10,11 @@ slowapi
 httpx
 pyjwt
 cloudinary
+
+redis
+aioredis
+elasticsearch[async]>=8.0.0
+celery>=5.3.0
+flower>=2.0.0
+prometheus-client>=0.19.0
+structlog>=23.2.0
