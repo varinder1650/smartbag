@@ -4,6 +4,7 @@ from admin.app import create_admin_app
 from contextlib import asynccontextmanager
 import logging
 from db.db_manager import get_database
+
 import os
 from dotenv import load_dotenv
 
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
         db = get_database()
         app.state.db = db
 
-        db.client.admin.command('ping') #test the db connection
+        db.client.admin.command('ping')
         logger.info("Database connected successfully!!")
         
         await create_indexes(db)
@@ -66,7 +67,7 @@ ws_app = create_admin_app()
 app.state.customer_app = customer_app
 app.state.ws_app = ws_app
 
-app.mount("/api",customer_app)
+# app.mount("/api",customer_app)
 app.mount("/admin",ws_app)
 
 ENV = os.getenv('ENVIRONMENT')

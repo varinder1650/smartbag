@@ -267,7 +267,40 @@ async def geocode_address(request: GeocodeRequest):
         logger.error(f"Geocode proxy error: {e}")
         raise HTTPException(status_code=500, detail="Geocoding failed")
 
-
+@router.post("/reverse-geocode")
+async def reverse_geocode_proxy(request: ReverseGeocodeRequest):
+    """Proxy for Ola Maps reverse geocoding"""
+    try:
+        url = f"{OLA_BASE_URL}/reverse-geocode"
+        params = {
+            'latlng': f"{request.latitude},{request.longitude}",
+            'api_key': OLA_API_KEY
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get('results') and len(data['results']) > 0:
+                    address_result = data['results'][0]
+                    
+                    return {
+                        'formatted_address': address_result.get('formatted_address'),
+                        'address_components': address_result.get('address_components', []),
+                        'latitude': request.latitude,
+                        'longitude': request.longitude
+                    }
+        
+        raise HTTPException(status_code=404, detail="Address not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reverse geocode proxy error: {e}")
+        raise HTTPException(status_code=500, detail="Reverse geocoding failed")
+        
 # @router.get("/search-addresses")
 # async def search_addresses(query: str = Query(..., description="Address search query")):
 #     """Search for addresses using Ola Maps API with fallback"""
@@ -490,40 +523,3 @@ async def geocode_address(request: GeocodeRequest):
 #     except Exception as e:
 #         logger.error(f"❌ Reverse geocoding error: {e}")
 #         return get_fallback_address(request.latitude, request.longitude)
-
-
-
-
-@router.post("/reverse-geocode")
-async def reverse_geocode_proxy(request: ReverseGeocodeRequest):
-    """Proxy for Ola Maps reverse geocoding"""
-    try:
-        url = f"{OLA_BASE_URL}/reverse-geocode"
-        params = {
-            'latlng': f"{request.latitude},{request.longitude}",
-            'api_key': OLA_API_KEY
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, params=params, timeout=10.0)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data.get('results') and len(data['results']) > 0:
-                    address_result = data['results'][0]
-                    
-                    return {
-                        'formatted_address': address_result.get('formatted_address'),
-                        'address_components': address_result.get('address_components', []),
-                        'latitude': request.latitude,
-                        'longitude': request.longitude
-                    }
-        
-        raise HTTPException(status_code=404, detail="Address not found")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Reverse geocode proxy error: {e}")
-        raise HTTPException(status_code=500, detail="Reverse geocoding failed")
